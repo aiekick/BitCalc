@@ -97,7 +97,7 @@ Each row shows the offset (`+byte` for a plain field, `+byte.bit` for a bitfield
 
 The toolbar has two layouts: **From**, the byte order and bit numbering the buffer is written in, and **To**, the layout to convert it to. For instance, a structure written by a little endian compiler that allocates bitfields from the LSB (**From** LE LSB0) and expected by a big endian target that allocates them from the MSB (**To** BE MSB0).
 
-The fields keep the same values in both layouts; only the bytes change. Under the field table, **Bytes** shows the buffer (**From**) and the same structure stored in the other layout (**To**), byte by byte, with the bytes that differ highlighted. The **Hex** and **C array** buttons copy either one, as `5A F4 34 12` or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
+The fields keep the same values in both layouts; only the bytes change. The buffer is shown in the From layout, with the same structure in the To layout right under it. Both can be edited: typing bytes in the To buffer rewrites the From buffer through the reverse conversion. Under the field table, **Bytes** shows the buffer (**From**) and the same structure stored in the other layout (**To**), byte by byte, with the bytes that differ highlighted. The **Hex** and **C array** buttons copy either one, as `5A F4 34 12` or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
 
 **⇄** swaps the two layouts and replaces the buffer by its conversion, so the values stay the same.
 

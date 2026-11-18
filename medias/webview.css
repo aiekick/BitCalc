@@ -153,3 +153,5 @@ select[hidden] { display: none; }
 .hl-enumerator { color: var(--vscode-symbolIcon-enumeratorMemberForeground, #4fc1ff); }
 .hl-punct { opacity: 0.75; }
 .hl-error { text-decoration: underline wavy var(--vscode-editorError-foreground, #f14c4c); text-underline-offset: 3px; }
+textarea.invalid { border-color: var(--vscode-inputValidation-errorBorder); }
+.split .pane > .section-title + textarea + .section-title { margin-top: 8px; }

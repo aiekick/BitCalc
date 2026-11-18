@@ -7,6 +7,7 @@ import {
   IDecodedField,
   ILayoutOptions,
   decodeStruct,
+  convertStruct,
   encodeStruct,
   enumeratorName,
   fieldValue,
@@ -96,8 +97,10 @@ byId("app").innerHTML = `
       <textarea id="definition" spellcheck="false" rows="8"></textarea>
     </div>
     <div class="pane">
-      <label class="section-title" for="buffer">Buffer (hex bytes)</label>
-      <textarea id="buffer" spellcheck="false" rows="8" placeholder="01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"></textarea>
+      <label class="section-title" for="buffer" id="bufferLabel">Buffer</label>
+      <textarea id="buffer" spellcheck="false" rows="3" placeholder="01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"></textarea>
+      <label class="section-title" for="targetBuffer" id="targetBufferLabel">Converted</label>
+      <textarea id="targetBuffer" spellcheck="false" rows="3" title="The structure in the To layout. Edit it to rewrite the From buffer through the reverse conversion"></textarea>
     </div>
   </div>
   <ul id="messages" class="messages"></ul>
@@ -131,6 +134,9 @@ byId("app").innerHTML = `
 
 const definitionInput = byId<HTMLTextAreaElement>("definition");
 const bufferInput = byId<HTMLTextAreaElement>("buffer");
+const targetBufferInput = byId<HTMLTextAreaElement>("targetBuffer");
+const bufferLabel = byId("bufferLabel");
+const targetBufferLabel = byId("targetBufferLabel");
 const offsetInput = byId<HTMLInputElement>("offset");
 const messages = byId("messages");
 const summary = byId("summary");
@@ -306,6 +312,12 @@ function renderFields(a_model: IModel): void {
 
 function renderConversion(a_model: IModel): void {
   conversionTitle.textContent = `Bytes: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}`;
+  bufferLabel.textContent = `Buffer, From ${layoutName(sourceLayout())} (hex bytes)`;
+  targetBufferLabel.textContent = `Buffer, To ${layoutName(targetLayout())}`;
+  if (document.activeElement !== targetBufferInput) {
+    targetBufferInput.value = formatHexBytes(a_model.converted);
+    targetBufferInput.classList.remove("invalid");
+  }
   byteGrid.replaceChildren();
   for (let start = 0; start < a_model.size; start += BYTES_PER_GRID_ROW) {
     const end = Math.min(start + BYTES_PER_GRID_ROW, a_model.size);
@@ -341,6 +353,30 @@ definitionInput.addEventListener("input", () => {
   state.definition = definitionInput.value;
   update();
 });
+/// Typing in the To buffer rewrites the structure bytes of the From buffer
+/// through the reverse conversion.
+targetBufferInput.addEventListener("input", () => {
+  if (model === undefined) {
+    return;
+  }
+  const typed = parseHexBytes(targetBufferInput.value);
+  if (typed.error !== undefined) {
+    targetBufferInput.classList.add("invalid");
+    targetBufferInput.title = typed.error;
+    return;
+  }
+  targetBufferInput.classList.remove("invalid");
+  targetBufferInput.title = "";
+  const fromBytes = convertStruct(model.fields, typed.bytes, targetLayout(), sourceLayout());
+  const required = state.offset + model.size;
+  const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
+  bytes.set(model.allBytes);
+  bytes.set(fromBytes, state.offset);
+  state.buffer = formatHexBytes(bytes);
+  bufferInput.value = state.buffer;
+  update();
+});
+targetBufferInput.addEventListener("blur", () => update());
 bufferInput.addEventListener("input", () => {
   state.buffer = bufferInput.value;
   update();

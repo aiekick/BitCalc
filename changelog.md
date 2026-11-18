@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.6] - 2026-11-18
+
+### Added
+
+- Struct Decoder: the converted buffer (To layout) is shown under the buffer (From layout), each labelled with its layout. It can be edited: the From buffer is rewritten through the reverse conversion.
+
 ## [0.0.5] - 2026-11-18
 
 ### Added
