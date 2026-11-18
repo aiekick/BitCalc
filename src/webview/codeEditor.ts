@@ -5,7 +5,7 @@ import { IStructParseResult, SCALAR_TYPES } from "../utils/structDef";
 /// metrics, the textarea text being transparent (its caret and selection
 /// stay visible). The pre follows the textarea scrolling.
 
-const KEYWORDS = new Set(["struct", "enum", "typedef", "class", "union", "const", "volatile", "signed", "unsigned"]);
+const KEYWORDS = new Set(["struct", "enum", "typedef", "class", "union", "const", "volatile", "signed", "unsigned", "__attribute__", "packed", "__packed"]);
 const TYPE_WORDS = new Set(["char", "short", "int", "long", "float", "double", "bool", "_Bool", "byte"]);
 
 function escapeHtml(a_text: string): string {
@@ -54,6 +54,8 @@ export class CodeEditor {
       let className = "";
       if (token.kind === "comment") {
         className = "hl-comment";
+      } else if (token.kind === "directive") {
+        className = "hl-directive";
       } else if (token.kind === "number") {
         className = "hl-number";
       } else if (token.kind === "word") {

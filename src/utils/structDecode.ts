@@ -1,9 +1,13 @@
 import { BitOrder, Endianness, fromBytes, maskOf, toBytes, toSigned } from "./bits";
 import { IEnumDef, IFieldDef, IScalarType } from "./structDef";
 
-/// Layout rules (packed, no alignment padding):
-/// - a plain field starts at the current byte offset and is stored with the
-///   chosen byte order;
+/// Layout rules:
+/// - alignment: a field starts at a multiple of its alignment, its size for
+///   a scalar, the largest alignment of its members for a structure, capped
+///   by the pack of the structure (#pragma pack, packed attribute, or the
+///   default: natural = no cap, packed = 1); a structure ends at a multiple
+///   of its own alignment. The bytes skipped are padding slots;
+/// - a plain field is stored with the chosen byte order;
 /// - consecutive bitfields share a storage unit of their declared type size
 ///   while they fit in it; a bitfield of another size, a bitfield that does
 ///   not fit, a plain field or a `: 0` bitfield closes the unit;
@@ -42,9 +46,29 @@ export interface IFieldSlot {
 
 export interface IStructLayout {
   readonly slots: IFieldSlot[];
-  /// size of the structure in bytes
+  /// size of the structure in bytes, end padding included
   readonly size: number;
+  /// alignment of the structure in bytes
+  readonly align: number;
 }
+
+/// Alignment rules: a_pack caps the alignment of the structure being laid
+/// out, a_defaultPack is used by the nested structures that set none.
+/// Infinity means natural alignment, 1 means packed.
+export interface IAlignment {
+  readonly pack: number;
+  readonly defaultPack: number;
+}
+
+export const PACKED: IAlignment = { pack: 1, defaultPack: 1 };
+export const NATURAL: IAlignment = { pack: Infinity, defaultPack: Infinity };
+
+/// Alignment of a structure: its own pack, else the default one.
+export function alignmentFor(a_pack: number | undefined, a_defaultPack: number): IAlignment {
+  return { pack: a_pack ?? a_defaultPack, defaultPack: a_defaultPack };
+}
+
+const PADDING_TYPE: IScalarType = { size: 1, signed: false, kind: "int" };
 
 export interface IDecodedField extends IFieldSlot {
   /// bits of the field read as unsigned; undefined if the buffer is too short
@@ -54,6 +78,7 @@ export interface IDecodedField extends IFieldSlot {
 export interface IDecodedStruct {
   readonly fields: IDecodedField[];
   readonly size: number;
+  readonly align: number;
 }
 
 interface IStorageUnit {
@@ -66,15 +91,36 @@ interface IStorageUnit {
 /// by the parser; this only bounds the work)
 const MAX_NESTING = 32;
 
-export function layoutStruct(a_fields: readonly IFieldDef[], a_depth = 0): IStructLayout {
+export function layoutStruct(a_fields: readonly IFieldDef[], a_alignment: IAlignment = PACKED, a_depth = 0): IStructLayout {
   const slots: IFieldSlot[] = [];
   let offset = 0;
+  let maxAlign = 1;
   let unit: IStorageUnit | undefined;
   const closeUnit = (): void => {
     if (unit !== undefined) {
       offset = unit.offset + unit.size;
       unit = undefined;
     }
+  };
+  /// Move to the next multiple of a_natural (capped by the pack), the bytes
+  /// skipped becoming padding.
+  const alignTo = (a_natural: number): void => {
+    const align = Math.max(1, Math.min(a_natural, a_alignment.pack));
+    maxAlign = Math.max(maxAlign, align);
+    const aligned = Math.ceil(offset / align) * align;
+    for (let padIndex = offset; padIndex < aligned; padIndex++) {
+      slots.push({
+        name: undefined,
+        typeName: "padding",
+        type: PADDING_TYPE,
+        enumDef: undefined,
+        byteOffset: padIndex,
+        unitSize: 1,
+        bitOffset: undefined,
+        bitWidth: 8
+      });
+    }
+    offset = aligned;
   };
 
   for (const field of a_fields) {
@@ -87,7 +133,12 @@ export function layoutStruct(a_fields: readonly IFieldDef[], a_depth = 0): IStru
       if (a_depth >= MAX_NESTING) {
         continue;
       }
-      const inner = layoutStruct(field.structDef.fields, a_depth + 1);
+      const inner = layoutStruct(
+        field.structDef.fields,
+        alignmentFor(field.structDef.pack, a_alignment.defaultPack),
+        a_depth + 1
+      );
+      alignTo(inner.align);
       for (let elementIndex = 0; elementIndex < count; elementIndex++) {
         const prefix = elementName(elementIndex);
         for (const slot of inner.slots) {
@@ -104,6 +155,7 @@ export function layoutStruct(a_fields: readonly IFieldDef[], a_depth = 0): IStru
 
     if (field.bits === undefined) {
       closeUnit();
+      alignTo(field.type.size);
       for (let elementIndex = 0; elementIndex < count; elementIndex++) {
         slots.push({
           name: elementName(elementIndex),
@@ -125,6 +177,7 @@ export function layoutStruct(a_fields: readonly IFieldDef[], a_depth = 0): IStru
     }
     if (unit === undefined || unit.size !== field.type.size || unit.used + field.bits > unit.size * 8) {
       closeUnit();
+      alignTo(field.type.size);
       unit = { offset, size: field.type.size, used: 0 };
     }
     slots.push({
@@ -140,7 +193,8 @@ export function layoutStruct(a_fields: readonly IFieldDef[], a_depth = 0): IStru
     unit.used += field.bits;
   }
   closeUnit();
-  return { slots, size: offset };
+  alignTo(maxAlign);
+  return { slots, size: offset, align: maxAlign };
 }
 
 /// Name of the enumerator holding a_value, if any.
@@ -182,11 +236,17 @@ export function writeSlot(a_slot: IFieldSlot, a_raw: bigint, a_bytes: Uint8Array
   a_bytes.set(toBytes(unitValue, a_slot.unitSize, a_options.endianness), a_slot.byteOffset);
 }
 
-export function decodeStruct(a_fields: readonly IFieldDef[], a_bytes: Uint8Array, a_options: ILayoutOptions): IDecodedStruct {
-  const layout = layoutStruct(a_fields);
+export function decodeStruct(
+  a_fields: readonly IFieldDef[],
+  a_bytes: Uint8Array,
+  a_options: ILayoutOptions,
+  a_alignment: IAlignment = PACKED
+): IDecodedStruct {
+  const layout = layoutStruct(a_fields, a_alignment);
   return {
     fields: layout.slots.map((a_slot) => ({ ...a_slot, raw: readSlot(a_slot, a_bytes, a_options) })),
-    size: layout.size
+    size: layout.size,
+    align: layout.align
   };
 }
 
@@ -207,9 +267,10 @@ export function convertStruct(
   a_fields: readonly IFieldDef[],
   a_bytes: Uint8Array,
   a_from: ILayoutOptions,
-  a_to: ILayoutOptions
+  a_to: ILayoutOptions,
+  a_alignment: IAlignment = PACKED
 ): Uint8Array {
-  const decoded = decodeStruct(a_fields, a_bytes, a_from);
+  const decoded = decodeStruct(a_fields, a_bytes, a_from, a_alignment);
   return encodeStruct(decoded.fields, decoded.size, a_to);
 }
 

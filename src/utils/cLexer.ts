@@ -2,7 +2,7 @@
 /// formatter and the syntax highlighting. Every character of the input
 /// belongs to exactly one token, so joining the token texts gives the input.
 
-export type CTokenKind = "space" | "comment" | "word" | "number" | "punct";
+export type CTokenKind = "space" | "comment" | "directive" | "word" | "number" | "punct";
 
 export interface CToken {
   readonly kind: CTokenKind;
@@ -14,6 +14,7 @@ export interface CToken {
 const PATTERNS: [CTokenKind, RegExp][] = [
   ["space", /\s+/y],
   ["comment", /\/\/[^\n]*|\/\*[\s\S]*?(?:\*\/|$)/y],
+  ["directive", /#[^\n]*/y],
   ["number", /0[xX][0-9a-fA-F_]*|0[bB][01_]*|0[oO][0-7_]*|[0-9][0-9_]*/y],
   ["word", /[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*/y],
   ["punct", /<<|>>|[^\s\w]/y]

@@ -7,6 +7,8 @@ import {
   IDecodedField,
   ILayoutOptions,
   decodeStruct,
+  IAlignment,
+  alignmentFor,
   convertStruct,
   encodeStruct,
   enumeratorName,
@@ -40,6 +42,8 @@ interface IStructState {
   targetBitOrder: BitOrder;
   /// structure to decode when the text declares several; "" for the last one
   rootStruct: string;
+  /// alignment used when the declarations set none
+  alignment: "natural" | "packed";
 }
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
@@ -56,6 +60,7 @@ const state: IStructState = {
   targetEndianness: config.endianness === "little" ? "big" : "little",
   targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
   rootStruct: "",
+  alignment: "natural",
   ...readSavedState<IStructState>(),
   ...api.getState()
 };
@@ -67,6 +72,7 @@ state.bitOrder = oneOf(state.bitOrder, ["lsb0", "msb0"], "lsb0");
 state.targetEndianness = oneOf(state.targetEndianness, ["little", "big"], "big");
 state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
 state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
+state.alignment = oneOf(state.alignment, ["natural", "packed"], "natural");
 const saveState = createStateSaver(api);
 
 const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
@@ -81,6 +87,10 @@ byId("app").innerHTML = `
     <span class="layout-label" title="Layout the data is converted to">To</span>
     <div class="segmented" id="targetEndianness" title="Byte order of the conversion">${ENDIANNESS_BUTTONS}</div>
     <div class="segmented" id="targetBitOrder" title="Bitfield allocation of the conversion">${BIT_ORDER_BUTTONS}</div>
+    <span class="layout-label" title="Alignment used when the declarations have no #pragma pack nor packed attribute">Alignment</span>
+    <div class="segmented" id="alignment" title="Natural: each field at a multiple of its size, as C compilers do. Packed: no padding. #pragma pack and __attribute__((packed)) in the declarations take precedence">
+      <button data-value="natural">Natural</button><button data-value="packed">Packed</button>
+    </div>
   </div>
   <div class="pane-header">
     <label class="section-title" for="definition">Structure</label>
@@ -172,6 +182,7 @@ interface IModel {
   readonly size: number;
   /// the structure stored in the target layout
   readonly converted: Uint8Array;
+  readonly alignment: IAlignment;
 }
 
 let model: IModel | undefined;
@@ -192,8 +203,11 @@ function computeModel(): IModel {
     addMessage(`Buffer: ${buffer.error}`);
   }
   const bytes = buffer.bytes.subarray(Math.min(state.offset, buffer.bytes.length));
-  const decoded = decodeStruct(parsed.fields, bytes, sourceLayout());
-  summary.textContent = `${parsed.name !== undefined ? `${parsed.name}: ` : ""}${decoded.size} bytes, buffer: ${bytes.length} bytes`
+  const defaultPack = state.alignment === "packed" ? 1 : Infinity;
+  const alignment = alignmentFor(parsed.pack, defaultPack);
+  const decoded = decodeStruct(parsed.fields, bytes, sourceLayout(), alignment);
+  const packText = parsed.pack !== undefined ? ` (pack ${parsed.pack})` : "";
+  summary.textContent = `${parsed.name !== undefined ? `${parsed.name}: ` : ""}${decoded.size} bytes, aligned on ${decoded.align}${packText}, buffer: ${bytes.length} bytes`
     + (state.offset > 0 ? ` after offset ${state.offset}` : "")
     + (bytes.length < decoded.size ? `, ${decoded.size - bytes.length} missing (read as 0 in the conversion)` : "")
     + (bytes.length > decoded.size ? `, ${bytes.length - decoded.size} unused` : "");
@@ -205,7 +219,8 @@ function computeModel(): IModel {
     bytes,
     decoded: decoded.fields,
     size: decoded.size,
-    converted: encodeStruct(decoded.fields, decoded.size, targetLayout())
+    converted: encodeStruct(decoded.fields, decoded.size, targetLayout()),
+    alignment
   };
 }
 
@@ -419,7 +434,7 @@ targetBufferInput.addEventListener("input", () => {
   }
   targetBufferInput.classList.remove("invalid");
   targetBufferInput.title = "";
-  const fromBytes = convertStruct(model.fields, typed.bytes, targetLayout(), sourceLayout());
+  const fromBytes = convertStruct(model.fields, typed.bytes, targetLayout(), sourceLayout(), model.alignment);
   const required = state.offset + model.size;
   const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
   bytes.set(model.allBytes);
@@ -558,7 +573,13 @@ onHostMessage((a_message) => {
   update();
 });
 
+const showAlignment = bindSegmented<"natural" | "packed">(byId("alignment"), (a_alignment) => {
+  state.alignment = a_alignment;
+  update();
+});
+
 function showLayouts(): void {
+  showAlignment(state.alignment);
   showEndianness(state.endianness);
   showBitOrder(state.bitOrder);
   showTargetEndianness(state.targetEndianness);

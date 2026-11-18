@@ -32,6 +32,11 @@ interface IEntry {
   closed: boolean;
 }
 
+/// Comments and preprocessor lines are kept as written, on their own line.
+function isAside(a_token: CToken): boolean {
+  return a_token.kind === "comment" || a_token.kind === "directive";
+}
+
 function toItems(a_tokens: CToken[]): IItem[] {
   const items: IItem[] = [];
   let gap = "";
@@ -83,9 +88,9 @@ function splitEntries(a_items: readonly IItem[], a_separator: string): IEntry[] 
   let current: IEntry | undefined;
   let depth = 0;
   for (const item of a_items) {
-    if (item.token.kind === "comment") {
+    if (isAside(item.token)) {
       const last = current ?? entries[entries.length - 1];
-      if (!item.newlineBefore && last !== undefined && last.tokens.length > 0) {
+      if (!item.newlineBefore && item.token.kind === "comment" && last !== undefined && last.tokens.length > 0) {
         last.comments.push(item.token.text);
       } else if (current !== undefined) {
         // A comment on its own line in the middle of a declaration
@@ -245,10 +250,10 @@ function collectTypeNames(a_items: readonly IItem[]): Set<string> {
 /// formatter may add or drop before "}") and the comments.
 function signature(a_text: string): string {
   const tokens = lexC(a_text).filter((a_token) => a_token.kind !== "space");
-  const code = tokens.filter((a_token) => a_token.kind !== "comment").map((a_token) => a_token.text);
+  const code = tokens.filter((a_token) => !isAside(a_token)).map((a_token) => a_token.text);
   const kept = code.filter((a_text_, a_index) => !((a_text_ === "," || a_text_ === ";") && (code[a_index + 1] === "}" || a_index === code.length - 1)));
   const comments = tokens
-    .filter((a_token) => a_token.kind === "comment")
+    .filter(isAside)
     .map((a_token) => a_token.text.replace(/\s+/g, ""))
     .sort();
   return `${kept.join(" ")}\n${comments.join("\n")}`;
@@ -272,8 +277,8 @@ export function formatDeclarations(a_text: string, a_indent = "    "): IFormatRe
     };
     while (index < items.length) {
       const item = items[index];
-      if (item.token.kind === "comment") {
-        if (!item.newlineBefore && lines.length > 0) {
+      if (isAside(item.token)) {
+        if (!item.newlineBefore && item.token.kind === "comment" && lines.length > 0) {
           lines[lines.length - 1] += ` ${item.token.text}`;
         } else {
           if (item.blankBefore) {
@@ -290,7 +295,7 @@ export function formatDeclarations(a_text: string, a_indent = "    "): IFormatRe
       commentAbove = false;
       const header: IItem[] = [];
       while (index < items.length && items[index].token.text !== "{" && items[index].token.text !== ";") {
-        if (items[index].token.kind !== "comment") {
+        if (!isAside(items[index].token)) {
           header.push(items[index]);
         }
         index++;
@@ -316,7 +321,7 @@ export function formatDeclarations(a_text: string, a_indent = "    "): IFormatRe
       index++;
       // Trailer: typedef name up to ";"
       const trailer: IItem[] = [];
-      while (index < items.length && items[index].token.text !== ";" && items[index].token.kind !== "comment") {
+      while (index < items.length && items[index].token.text !== ";" && !isAside(items[index].token)) {
         trailer.push(items[index]);
         index++;
       }

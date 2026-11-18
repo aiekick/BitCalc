@@ -162,3 +162,4 @@ textarea.invalid { border-color: var(--vscode-inputValidation-errorBorder); }
 .data .copy-group { margin-left: auto; }
 .offset-label { display: flex; align-items: center; gap: 4px; }
 .fields td.number { text-align: right; font-variant-numeric: tabular-nums; }
+.hl-directive { color: var(--vscode-symbolIcon-keywordForeground, #c586c0); }

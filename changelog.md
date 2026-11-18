@@ -4,6 +4,16 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.11] - 2026-11-18
+
+### Added
+
+- Struct Decoder alignment: Natural (the C rules, now the default) or Packed in the toolbar, overridden by `#pragma pack(N)` (push, pop, reset) and `__attribute__((packed))` in the declarations, nested structures keeping their own pack. Padding bytes show as (padding) rows, the summary gives the alignment. Other preprocessor lines are ignored, and the formatter and the highlighting keep them.
+
+### Changed
+
+- Struct Decoder: structures are naturally aligned by default; they were always packed before. Choose Packed in the toolbar or add `#pragma pack(1)` for the previous layout.
+
 ## [0.0.10] - 2026-11-18
 
 ### Fixed

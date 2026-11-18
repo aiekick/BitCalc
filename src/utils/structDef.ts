@@ -13,6 +13,9 @@
 ///     uint8_t  data[4];        // array
 ///   };
 ///
+/// Alignment: `#pragma pack(N)` (push / pop too) and `__attribute__((packed))`
+/// set the maximum alignment of the structures; other preprocessor lines are
+/// ignored.
 /// `typedef <type> <alias>;` declares an alias of a scalar, enum or structure
 /// type, usable before or after its declaration.
 /// The last structure is the one decoded unless another one is asked for. A
@@ -47,6 +50,9 @@ export interface IStructDef {
   readonly name: string | undefined;
   readonly fields: IFieldDef[];
   readonly line: number;
+  /// maximum alignment from #pragma pack or __attribute__((packed)) (1);
+  /// undefined when the text does not say, the default alignment applies
+  readonly pack: number | undefined;
 }
 
 interface IFieldDefBase {
@@ -96,6 +102,8 @@ export interface IStructParseResult {
   readonly structs: IStructDef[];
   readonly enums: IEnumDef[];
   readonly typedefs: ITypedef[];
+  /// pack of the decoded structure, see IStructDef.pack
+  readonly pack: number | undefined;
   readonly errors: IParseError[];
 }
 
@@ -139,6 +147,70 @@ function stripComments(a_text: string): string {
   return a_text
     .replace(/\/\*[\s\S]*?\*\//g, (a_comment) => a_comment.replace(/[^\n]/g, " "))
     .replace(/\/\/[^\n]*/g, "");
+}
+
+interface IPreprocessed {
+  readonly text: string;
+  /// pack in effect at a position of the text
+  readonly packAt: (a_position: number) => number | undefined;
+  /// positions of __attribute__((packed)) and __packed
+  readonly packedMarks: number[];
+}
+
+const PACKED_ATTRIBUTE = /__attribute__\s*\(\(\s*(?:__)?packed(?:__)?\s*\)\)|\b__packed\b/g;
+
+/// Blank the preprocessor lines (keeping the line breaks), following the
+/// #pragma pack directives, and blank the packed attributes, remembering
+/// where they were. Other directives (#include, #define...) are ignored.
+function preprocess(a_text: string, a_errors: IParseError[]): IPreprocessed {
+  const changes: { position: number; pack: number | undefined }[] = [];
+  const stack: (number | undefined)[] = [];
+  let current: number | undefined;
+  const blank = (a_part: string): string => a_part.replace(/[^\n]/g, " ");
+
+  let text = a_text.replace(/^[ \t]*#[^\n]*/gm, (a_line: string, a_offset: number) => {
+    const pragma = /^\s*#\s*pragma\s+pack\s*\(([^)]*)\)/.exec(a_line);
+    if (pragma !== null) {
+      const args = pragma[1].split(",").map((a_arg) => a_arg.trim()).filter((a_arg) => a_arg.length > 0);
+      let value = args[args.length - 1];
+      if (args[0] === "push") {
+        stack.push(current);
+      } else if (args[0] === "pop") {
+        current = stack.pop();
+      }
+      if (args.length === 0) {
+        current = undefined;
+      } else if (value !== undefined && value !== "push" && value !== "pop") {
+        value = value.replace(/^0x/i, "");
+        const pack = Number(value);
+        if ([1, 2, 4, 8, 16].includes(pack)) {
+          current = pack;
+        } else {
+          a_errors.push({ line: lineAt(a_text, a_offset), message: `Invalid #pragma pack value "${value}", expected 1, 2, 4, 8 or 16` });
+        }
+      }
+      changes.push({ position: a_offset, pack: current });
+    }
+    return blank(a_line);
+  });
+
+  const packedMarks: number[] = [];
+  text = text.replace(PACKED_ATTRIBUTE, (a_attribute: string, a_offset: number) => {
+    packedMarks.push(a_offset);
+    return blank(a_attribute);
+  });
+
+  const packAt = (a_position: number): number | undefined => {
+    let pack: number | undefined;
+    for (const change of changes) {
+      if (change.position > a_position) {
+        break;
+      }
+      pack = change.pack;
+    }
+    return pack;
+  };
+  return { text, packAt, packedMarks };
 }
 
 function normalizeTypeName(a_text: string): string {
@@ -322,11 +394,13 @@ interface IBlock {
   readonly bodyStart: number;
   readonly bodyEnd: number;
   readonly line: number;
+  /// see IStructDef.pack
+  readonly pack: number | undefined;
 }
 
 /// Find the top level { } blocks and what they declare. Text between blocks
 /// may only be typedefs.
-function scanBlocks(a_text: string, a_typedefs: Map<string, ITypedef>, a_errors: IParseError[]): IBlock[] {
+function scanBlocks(a_text: string, a_pre: IPreprocessed, a_typedefs: Map<string, ITypedef>, a_errors: IParseError[]): IBlock[] {
   const blocks: IBlock[] = [];
   let cursor = 0;
   for (;;) {
@@ -362,13 +436,15 @@ function scanBlocks(a_text: string, a_typedefs: Map<string, ITypedef>, a_errors:
     const trailerEnd = semicolon < 0 ? a_text.length : semicolon;
     const trailerName = /^\s*([A-Za-z_]\w*)/.exec(a_text.slice(close + 1, trailerEnd))?.[1];
     cursor = trailerEnd + 1;
+    const packed = a_pre.packedMarks.some((a_mark) => (a_mark >= headerStart && a_mark < open) || (a_mark > close && a_mark <= trailerEnd));
+    const pack = packed ? 1 : a_pre.packAt(open);
 
     const enumMatch = /\benum(?: (?:class|struct))?(?: ([A-Za-z_]\w*))?(?: ?: ?(.+))?$/.exec(header);
     const structMatch = /\bstruct(?: ([A-Za-z_]\w*))?$/.exec(header);
     if (enumMatch !== null) {
-      blocks.push({ kind: "enum", name: enumMatch[1] ?? trailerName, underlying: enumMatch[2], bodyStart: open + 1, bodyEnd: close, line });
+      blocks.push({ kind: "enum", name: enumMatch[1] ?? trailerName, underlying: enumMatch[2], bodyStart: open + 1, bodyEnd: close, line, pack });
     } else if (structMatch !== null) {
-      blocks.push({ kind: "struct", name: structMatch[1] ?? trailerName, underlying: undefined, bodyStart: open + 1, bodyEnd: close, line });
+      blocks.push({ kind: "struct", name: structMatch[1] ?? trailerName, underlying: undefined, bodyStart: open + 1, bodyEnd: close, line, pack });
     } else if (/\bunion\b/.test(header)) {
       a_errors.push({ line, message: "Unions are not supported" });
     } else {
@@ -480,8 +556,9 @@ function breakCycles(a_structs: IStructDef[], a_errors: IParseError[]): void {
 }
 
 export function parseStruct(a_text: string, a_rootName?: string): IStructParseResult {
-  const text = stripComments(a_text);
   const errors: IParseError[] = [];
+  const pre = preprocess(stripComments(a_text), errors);
+  const text = pre.text;
   const typedefs = new Map<string, ITypedef>();
   if (!text.includes("{")) {
     // A plain list of fields (and typedefs): one anonymous structure
@@ -492,11 +569,13 @@ export function parseStruct(a_text: string, a_rootName?: string): IStructParseRe
     const fields = parseFields(text, 0, text.length, resolve, typedefs, errors);
     checkTypedefs(typedefs, resolve, errors);
     errors.sort((a_left, a_right) => a_left.line - a_right.line);
-    const root: IStructDef = { name: undefined, fields, line: 1 };
-    return { name: undefined, fields, structs: [root], enums: [], typedefs: Array.from(typedefs.values()), errors };
+    const firstCode = text.search(/\S/);
+    const pack = pre.packedMarks.length > 0 ? 1 : pre.packAt(firstCode < 0 ? 0 : firstCode);
+    const root: IStructDef = { name: undefined, fields, line: 1, pack };
+    return { name: undefined, fields, structs: [root], enums: [], typedefs: Array.from(typedefs.values()), pack, errors };
   }
 
-  const blocks = scanBlocks(text, typedefs, errors);
+  const blocks = scanBlocks(text, pre, typedefs, errors);
   const enums = new Map<string, IEnumDef>();
   const structs = new Map<string, IStructDef>();
   const structList: IStructDef[] = [];
@@ -510,7 +589,7 @@ export function parseStruct(a_text: string, a_rootName?: string): IStructParseRe
       }
       continue;
     }
-    const structDef: IStructDef = { name: block.name, fields: [], line: block.line };
+    const structDef: IStructDef = { name: block.name, fields: [], line: block.line, pack: block.pack };
     if (block.name !== undefined) {
       if (structs.has(block.name)) {
         errors.push({ line: block.line, message: `Structure "${block.name}" is defined twice` });
@@ -548,6 +627,7 @@ export function parseStruct(a_text: string, a_rootName?: string): IStructParseRe
     structs: structList,
     enums: Array.from(enums.values()),
     typedefs: Array.from(typedefs.values()),
+    pack: root?.pack,
     errors
   };
 }

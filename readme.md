@@ -86,7 +86,7 @@ Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `ui
 
 **Layout rules**, chosen to be predictable:
 
-- The structure is packed: no alignment padding is added. Write the padding fields yourself when the real structure has some.
+- **Alignment**: with **Natural** (the default, as C compilers do), each field starts at a multiple of its size, a bitfield unit at a multiple of its type size, a nested structure at a multiple of its largest member, and a structure ends at a multiple of its alignment. With **Packed**, no padding is added. `#pragma pack(N)` (with `push`, `pop` and `#pragma pack()`) and `__attribute__((packed))` in the declarations take precedence for the structures they apply to, nested ones included. The bytes added by the alignment show as `(padding)` rows, and the summary gives the alignment of the structure. Other preprocessor lines, such as `#include`, are ignored, so a header can be pasted as is.
 - Plain fields are read with the chosen byte order (**LE** or **BE**).
 - Consecutive bitfields share a storage unit of the size of their declared type while they fit in it. A bitfield of another type size, a bitfield that does not fit, a plain field or a `: 0` bitfield starts a new unit. This is what MSVC does; GCC and Clang can also mix types in one unit.
 - The storage unit is read with the chosen byte order, then the bitfields are allocated from its bit 0: the least significant bit in **LSB0**, the most significant one in **MSB0**.
