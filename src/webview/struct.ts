@@ -249,6 +249,54 @@ function displayValue(a_field: IDecodedField): string {
   return String(value);
 }
 
+const OTHER_VALUE = "\u0000other";
+
+/// Combo box of an enum field: its enumerators, the current value when it
+/// matches none of them, and "Other value…" to type any value instead.
+function enumSelect(a_field: IDecodedField): HTMLSelectElement {
+  const select = createElement("select", "value-input value-select");
+  const enumDef = a_field.enumDef;
+  if (enumDef === undefined) {
+    return select;
+  }
+  const value = fieldValue(a_field);
+  const current = typeof value === "bigint" ? enumeratorName(enumDef, value) : undefined;
+  if (value === undefined) {
+    const placeholder = createElement("option", undefined, "—");
+    placeholder.value = "";
+    placeholder.disabled = true;
+    select.append(placeholder);
+  } else if (current === undefined) {
+    const unknown = createElement("option", undefined, `${String(value)} (no enumerator)`);
+    unknown.value = "";
+    select.append(unknown);
+  }
+  for (const member of enumDef.members) {
+    const option = createElement("option", undefined, `${member.name} (${member.value})`);
+    option.value = member.name;
+    select.append(option);
+  }
+  const other = createElement("option", undefined, "Other value…");
+  other.value = OTHER_VALUE;
+  select.append(other);
+  select.value = current ?? "";
+  select.title = `${enumDef.name}: pick an enumerator, or Other value… to type a number or an expression`;
+
+  select.addEventListener("change", () => {
+    if (select.value === OTHER_VALUE) {
+      const input = valueInput(a_field);
+      select.replaceWith(input);
+      input.focus();
+      input.select();
+      return;
+    }
+    if (select.value !== "") {
+      writeField(a_field, parseFieldInput(a_field, select.value));
+    }
+  });
+  return select;
+}
+
 function valueInput(a_field: IDecodedField): HTMLInputElement {
   const input = createElement("input", "value-input");
   const value = displayValue(a_field);
@@ -293,7 +341,7 @@ function renderFields(a_model: IModel): void {
       row.append(createElement("td", undefined, text));
     }
     const valueCell = createElement("td", "value");
-    valueCell.append(valueInput(field));
+    valueCell.append(field.enumDef !== undefined ? enumSelect(field) : valueInput(field));
     row.append(valueCell);
     const raw = field.raw;
     const cells = raw === undefined

@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.7] - 2026-11-18
+
+### Added
+
+- Struct Decoder: enum fields are edited with a combo box listing the enumerators as NAME (value); a value matching no enumerator is shown as such, and Other value… switches to typing a number or an expression.
+
 ## [0.0.6] - 2026-11-18
 
 ### Added
