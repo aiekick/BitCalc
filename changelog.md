@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.41] - 2026-11-18
+
+### Changed
+
+- Readme screenshots moved to `docs/` (outside the package).
+
 ## [0.0.40] - 2026-11-18
 
 ### Removed
