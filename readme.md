@@ -82,7 +82,7 @@ The **Template…** list above the structure replaces it with a ready-made one: 
 
 Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Typedefs of arrays, pointers, unions and structures defined inside another one are not supported: declare the structures before.
 
-**Buffer**: hex bytes written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`. **Offset** skips the given number of bytes before the structure.
+**Data**: the view reads from top to bottom: the declarations, the field table of the decoded structure, then the **Data of <structure>** section holding the bytes it is decoded from. They are written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`; **Offset** skips the given number of bytes before the structure.
 
 **Layout rules**, chosen to be predictable:
 
@@ -97,7 +97,7 @@ Each row shows the offset (`+byte` for a plain field, `+byte.bit` for a bitfield
 
 The toolbar has two layouts: **From**, the byte order and bit numbering the buffer is written in, and **To**, the layout to convert it to. For instance, a structure written by a little endian compiler that allocates bitfields from the LSB (**From** LE LSB0) and expected by a big endian target that allocates them from the MSB (**To** BE MSB0).
 
-The fields keep the same values in both layouts; only the bytes change. The buffer is shown in the From layout, with the same structure in the To layout right under it. Both can be edited: typing bytes in the To buffer rewrites the From buffer through the reverse conversion. Under the field table, **Bytes** shows the buffer (**From**) and the same structure stored in the other layout (**To**), byte by byte, with the bytes that differ highlighted. The **Hex** and **C array** buttons copy either one, as `5A F4 34 12` or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
+The fields keep the same values in both layouts; only the bytes change. The data section shows the bytes in the From layout, with the same structure in the To layout right under it. Both can be edited: typing bytes in the To data rewrites the From data through the reverse conversion. **Byte by byte** compares them, with the bytes that differ highlighted. The **Hex** and **C array** buttons next to each one copy it, as `5A F4 34 12` or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
 
 **⇄** swaps the two layouts and replaces the buffer by its conversion, so the values stay the same.
 

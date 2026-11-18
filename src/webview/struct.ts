@@ -74,35 +74,24 @@ const BIT_ORDER_BUTTONS = `<button data-value="lsb0">LSB0</button><button data-v
 
 byId("app").innerHTML = `
   <div class="toolbar">
-    <span class="layout-label" title="Layout the buffer is written in">From</span>
-    <div class="segmented" id="endianness" title="Byte order of the buffer">${ENDIANNESS_BUTTONS}</div>
-    <div class="segmented" id="bitOrder" title="Bitfield allocation of the buffer: from the LSB (LSB0) or the MSB (MSB0) of their storage unit">${BIT_ORDER_BUTTONS}</div>
-    <button id="swapLayouts" title="Swap From and To: the buffer is replaced by its conversion, the values stay the same">⇄</button>
-    <span class="layout-label" title="Layout the structure is converted to">To</span>
+    <span class="layout-label" title="Layout the data is written in">From</span>
+    <div class="segmented" id="endianness" title="Byte order of the data">${ENDIANNESS_BUTTONS}</div>
+    <div class="segmented" id="bitOrder" title="Bitfield allocation of the data: from the LSB (LSB0) or the MSB (MSB0) of their storage unit">${BIT_ORDER_BUTTONS}</div>
+    <button id="swapLayouts" title="Swap From and To: the data is replaced by its conversion, the values stay the same">⇄</button>
+    <span class="layout-label" title="Layout the data is converted to">To</span>
     <div class="segmented" id="targetEndianness" title="Byte order of the conversion">${ENDIANNESS_BUTTONS}</div>
     <div class="segmented" id="targetBitOrder" title="Bitfield allocation of the conversion">${BIT_ORDER_BUTTONS}</div>
-    <label title="Number of buffer bytes skipped before the structure">Offset <input type="number" id="offset" min="0" class="offset"></label>
   </div>
-  <div class="split">
-    <div class="pane">
-      <div class="pane-header">
-        <label class="section-title" for="definition">Structure</label>
-        <select id="template" title="Replace the structure with a template (Ctrl+Z undoes it)">
-          <option value="" selected>Template…</option>
-          ${STRUCT_TEMPLATES.map((a_template, a_index) => `<option value="${a_index}">${a_template.label}</option>`).join("")}
-        </select>
-        <button id="format" title="Format the declarations (Shift+Alt+F), Ctrl+Z undoes it">Format</button>
-        <button id="helpToggle" class="help-toggle" title="Supported types and syntax" aria-expanded="false">?</button>
-      </div>
-      <textarea id="definition" spellcheck="false" rows="8"></textarea>
-    </div>
-    <div class="pane">
-      <label class="section-title" for="buffer" id="bufferLabel">Buffer</label>
-      <textarea id="buffer" spellcheck="false" rows="3" placeholder="01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"></textarea>
-      <label class="section-title" for="targetBuffer" id="targetBufferLabel">Converted</label>
-      <textarea id="targetBuffer" spellcheck="false" rows="3" title="The structure in the To layout. Edit it to rewrite the From buffer through the reverse conversion"></textarea>
-    </div>
+  <div class="pane-header">
+    <label class="section-title" for="definition">Structure</label>
+    <select id="template" title="Replace the structure with a template (Ctrl+Z undoes it)">
+      <option value="" selected>Template…</option>
+      ${STRUCT_TEMPLATES.map((a_template, a_index) => `<option value="${a_index}">${a_template.label}</option>`).join("")}
+    </select>
+    <button id="format" title="Format the declarations (Shift+Alt+F), Ctrl+Z undoes it">Format</button>
+    <button id="helpToggle" class="help-toggle" title="Supported types and syntax" aria-expanded="false">?</button>
   </div>
+  <textarea id="definition" spellcheck="false" rows="10"></textarea>
   <ul id="messages" class="messages"></ul>
   <div class="summary-line">
     <select id="rootStruct" title="Structure to decode" hidden></select>
@@ -112,24 +101,32 @@ byId("app").innerHTML = `
     <table class="fields">
       <thead><tr>
         <th>Offset</th><th>Bits</th><th>Field</th><th>Type</th>
-        <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: both buffers are updated">DEC ✎</th>
+        <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated">DEC ✎</th>
         <th>HEX</th><th>OCT</th><th>BIN</th>
       </tr></thead>
       <tbody id="fields"></tbody>
     </table>
   </div>
-  <div class="conversion">
+  <section class="data">
+    <h3 class="data-title" id="dataTitle"></h3>
     <div class="pane-header">
-      <span class="section-title" id="conversionTitle"></span>
+      <label class="section-title" for="buffer" id="bufferLabel"></label>
+      <label class="offset-label" title="Number of bytes skipped before the structure">Offset <input type="number" id="offset" min="0" class="offset"></label>
       <span class="copy-group">
-        <span>From</span>
-        <button data-copy="from-hex">Hex</button><button data-copy="from-c">C array</button>
-        <span>To</span>
-        <button data-copy="to-hex">Hex</button><button data-copy="to-c">C array</button>
+        <button data-copy="from-hex" title="Copy the structure bytes as hex">Hex</button><button data-copy="from-c" title="Copy the structure bytes as a C array">C array</button>
       </span>
     </div>
+    <textarea id="buffer" spellcheck="false" rows="3" placeholder="01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"></textarea>
+    <div class="pane-header">
+      <label class="section-title" for="targetBuffer" id="targetBufferLabel"></label>
+      <span class="copy-group">
+        <button data-copy="to-hex" title="Copy the converted bytes as hex">Hex</button><button data-copy="to-c" title="Copy the converted bytes as a C array">C array</button>
+      </span>
+    </div>
+    <textarea id="targetBuffer" spellcheck="false" rows="3" title="The data in the To layout. Edit it to rewrite the From data through the reverse conversion"></textarea>
+    <div class="section-title" id="conversionTitle"></div>
     <div class="table-wrap"><table class="byte-grid" id="byteGrid"></table></div>
-  </div>
+  </section>
 `;
 
 const definitionInput = byId<HTMLTextAreaElement>("definition");
@@ -142,6 +139,7 @@ const messages = byId("messages");
 const summary = byId("summary");
 const fieldsBody = byId("fields");
 const conversionTitle = byId("conversionTitle");
+const dataTitle = byId("dataTitle");
 const byteGrid = byId("byteGrid");
 const rootSelect = byId<HTMLSelectElement>("rootStruct");
 const definitionEditor = new CodeEditor(definitionInput);
@@ -160,6 +158,8 @@ function layoutName(a_layout: ILayoutOptions): string {
 
 /// Everything the view shows, computed from the state.
 interface IModel {
+  /// name of the decoded structure
+  readonly name: string | undefined;
   readonly fields: IFieldDef[];
   readonly allBytes: Uint8Array;
   /// buffer bytes after the offset
@@ -195,6 +195,7 @@ function computeModel(): IModel {
     + (bytes.length > decoded.size ? `, ${bytes.length - decoded.size} unused` : "");
   summary.classList.toggle("warning", bytes.length < decoded.size);
   return {
+    name: parsed.name,
     fields: parsed.fields,
     allBytes: buffer.bytes,
     bytes,
@@ -359,9 +360,10 @@ function renderFields(a_model: IModel): void {
 }
 
 function renderConversion(a_model: IModel): void {
-  conversionTitle.textContent = `Bytes: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}`;
-  bufferLabel.textContent = `Buffer, From ${layoutName(sourceLayout())} (hex bytes)`;
-  targetBufferLabel.textContent = `Buffer, To ${layoutName(targetLayout())}`;
+  dataTitle.textContent = `Data of ${a_model.name ?? "the structure"} (${a_model.size} bytes)`;
+  conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}`;
+  bufferLabel.textContent = `From ${layoutName(sourceLayout())} (hex bytes)`;
+  targetBufferLabel.textContent = `To ${layoutName(targetLayout())}`;
   if (document.activeElement !== targetBufferInput) {
     targetBufferInput.value = formatHexBytes(a_model.converted);
     targetBufferInput.classList.remove("invalid");

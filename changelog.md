@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.8] - 2026-11-18
+
+### Changed
+
+- Struct Decoder layout, from top to bottom: the declarations (full width), the field table, then a "Data of <structure>" section with the From bytes and their offset, the To bytes under them, each with its copy buttons, and the byte by byte comparison.
+
 ## [0.0.7] - 2026-11-18
 
 ### Added

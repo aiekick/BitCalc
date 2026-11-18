@@ -156,3 +156,8 @@ select[hidden] { display: none; }
 textarea.invalid { border-color: var(--vscode-inputValidation-errorBorder); }
 .split .pane > .section-title + textarea + .section-title { margin-top: 8px; }
 .value-select { padding: 1px 2px; }
+.data { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--vscode-widget-border, #8884); }
+.data-title { margin: 0 0 6px; font-size: 1.05em; }
+.data .pane-header { margin-top: 6px; }
+.data .copy-group { margin-left: auto; }
+.offset-label { display: flex; align-items: center; gap: 4px; }
