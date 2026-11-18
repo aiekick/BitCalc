@@ -8,7 +8,7 @@ import {
   ILayoutOptions,
   decodeStruct,
   IAlignment,
-  alignmentFor,
+  icdAlignment,
   convertStruct,
   encodeStruct,
   enumeratorName,
@@ -42,10 +42,8 @@ interface IStructState {
   targetBitOrder: BitOrder;
   /// structure to decode when the text declares several; "" for the last one
   rootStruct: string;
-  /// alignment used when the declarations set none
-  alignment: "natural" | "packed";
-  /// offsets counted in words of this many bits; 0 for storage units
-  offsetWord: number;
+  /// size in bits of the words the message is made of (ICD layout)
+  wordBits: number;
   /// how both buffers are shown, typed and copied; state.buffer itself is
   /// always kept as hex bytes
   bufferFormat: BufferFormat;
@@ -65,8 +63,7 @@ const state: IStructState = {
   targetEndianness: config.endianness === "little" ? "big" : "little",
   targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
   rootStruct: "",
-  alignment: "natural",
-  offsetWord: 32,
+  wordBits: 32,
   bufferFormat: "bytes",
   ...readSavedState<IStructState>(),
   ...api.getState()
@@ -79,8 +76,7 @@ state.bitOrder = oneOf(state.bitOrder, ["lsb0", "msb0"], "lsb0");
 state.targetEndianness = oneOf(state.targetEndianness, ["little", "big"], "big");
 state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
 state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
-state.alignment = oneOf(state.alignment, ["natural", "packed"], "natural");
-state.offsetWord = [0, 8, 16, 32, 64].includes(state.offsetWord) ? state.offsetWord : 32;
+state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 const saveState = createStateSaver(api);
 
@@ -96,9 +92,9 @@ byId("app").innerHTML = `
     <span class="layout-label" title="Layout the data is converted to">To</span>
     <div class="segmented" id="targetEndianness" title="Byte order of the conversion">${ENDIANNESS_BUTTONS}</div>
     <div class="segmented" id="targetBitOrder" title="Bitfield allocation of the conversion">${BIT_ORDER_BUTTONS}</div>
-    <span class="layout-label" title="Alignment used when the declarations have no #pragma pack nor packed attribute">Alignment</span>
-    <div class="segmented" id="alignment" title="Natural: each field at a multiple of its size, as C compilers do. Packed: no padding. #pragma pack and __attribute__((packed)) in the declarations take precedence">
-      <button data-value="natural">Natural</button><button data-value="packed">Packed</button>
+    <span class="layout-label" title="The message is a sequence of words of this size; the fields follow each other inside the words and never straddle two of them">Word</span>
+    <div class="segmented" id="wordBits" title="Size of the words of the message">
+      <button data-value="8">8</button><button data-value="16">16</button><button data-value="32">32</button><button data-value="64">64</button>
     </div>
   </div>
   <div class="pane-header">
@@ -115,22 +111,13 @@ byId("app").innerHTML = `
   <div class="summary-line">
     <select id="rootStruct" title="Structure to decode" hidden></select>
     <span id="summary" class="summary"></span>
-    <label class="offset-unit" title="Unit of the first column: the word or byte holding the field, or the byte of its storage unit">Offset in
-      <select id="offsetWord">
-        <option value="0">storage units</option>
-        <option value="8">bytes</option>
-        <option value="16">16-bit words</option>
-        <option value="32">32-bit words</option>
-        <option value="64">64-bit words</option>
-      </select>
-    </label>
   </div>
   <div class="table-wrap">
     <table class="fields">
       <thead><tr>
-        <th id="offsetHeader">Offset</th>
-        <th title="First bit inside the word (or byte, or storage unit) of the first column; the count restarts at 0 with each word">Bit min</th>
-        <th title="Last bit inside its word (or byte, or storage unit)">Bit max</th>
+        <th title="Word holding the field, counted from 0">Word</th>
+        <th title="First bit of the field inside its word; the count restarts at 0 with each word">Bit min</th>
+        <th title="Last bit of the field inside its word">Bit max</th>
         <th title="Width in bits">Bits</th>
         <th>Field</th><th>Type</th>
         <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated">DEC ✎</th>
@@ -185,13 +172,7 @@ const conversionTitle = byId("conversionTitle");
 const dataTitle = byId("dataTitle");
 const byteGrid = byId("byteGrid");
 const rootSelect = byId<HTMLSelectElement>("rootStruct");
-const offsetHeader = byId("offsetHeader");
-const offsetWordSelect = byId<HTMLSelectElement>("offsetWord");
-offsetWordSelect.value = String(state.offsetWord);
-offsetWordSelect.addEventListener("change", () => {
-  state.offsetWord = Number(offsetWordSelect.value);
-  update();
-});
+
 const definitionEditor = new CodeEditor(definitionInput);
 
 function sourceLayout(): ILayoutOptions {
@@ -239,11 +220,10 @@ function computeModel(): IModel {
     addMessage(`Buffer: ${buffer.error}`);
   }
   const bytes = buffer.bytes.subarray(Math.min(state.offset, buffer.bytes.length));
-  const defaultPack = state.alignment === "packed" ? 1 : Infinity;
-  const alignment = alignmentFor(parsed.pack, defaultPack);
+  const alignment = icdAlignment(state.wordBits);
   const decoded = decodeStruct(parsed.fields, bytes, sourceLayout(), alignment);
-  const packText = parsed.pack !== undefined ? ` (pack ${parsed.pack})` : "";
-  summary.textContent = `${parsed.name !== undefined ? `${parsed.name}: ` : ""}${decoded.size} bytes, aligned on ${decoded.align}${packText}, buffer: ${bytes.length} bytes`
+  const words = (decoded.size * 8) / state.wordBits;
+  summary.textContent = `${parsed.name !== undefined ? `${parsed.name}: ` : ""}${words} word${words === 1 ? "" : "s"} of ${state.wordBits} bits (${decoded.size} bytes), buffer: ${bytes.length} bytes`
     + (state.offset > 0 ? ` after offset ${state.offset}` : "")
     + (bytes.length < decoded.size ? `, ${decoded.size - bytes.length} missing (read as 0 in the conversion)` : "")
     + (bytes.length > decoded.size ? `, ${bytes.length - decoded.size} unused` : "");
@@ -260,37 +240,19 @@ function computeModel(): IModel {
   };
 }
 
-/// Offset, first bit, last bit and width of a field. The bits are counted
-/// in allocation order (the first byte holds bits 0..7, a bitfield sits at
-/// the first bit of its unit plus its place in the unit) and restart at 0
-/// with each word: with 32-bit words, bit 31 is followed by bit 0 of the next
-/// word. A field spanning words (packed structures) shows the word range and
-/// its bits relative to itself, 0 to width - 1. With storage units, the
-/// offset is the byte of the unit and the bits are numbered inside the unit.
+/// Word, first bit, last bit and width of a field. The bits are numbered
+/// inside the word, from 0 with each word. A field wider than a word shows
+/// the range of its words and its bits relative to itself.
 function placementCells(a_field: IDecodedField): string[] {
-  const width = String(a_field.bitWidth);
-  if (state.offsetWord === 0) {
-    const bitMin = a_field.bitOffset ?? 0;
-    return [`+${a_field.byteOffset}`, String(bitMin), String(bitMin + a_field.bitWidth - 1), width];
-  }
   const first = a_field.byteOffset * 8 + (a_field.bitOffset ?? 0);
   const last = first + a_field.bitWidth - 1;
-  const firstWord = Math.floor(first / state.offsetWord);
-  const lastWord = Math.floor(last / state.offsetWord);
+  const firstWord = Math.floor(first / state.wordBits);
+  const lastWord = Math.floor(last / state.wordBits);
   if (firstWord !== lastWord) {
-    // Spanning words (packed structures): bits relative to the field
-    return [`${firstWord}–${lastWord}`, "0", String(a_field.bitWidth - 1), width];
+    return [`${firstWord}–${lastWord}`, "0", String(a_field.bitWidth - 1), String(a_field.bitWidth)];
   }
-  return [String(firstWord), String(first % state.offsetWord), String(last % state.offsetWord), width];
+  return [String(firstWord), String(first % state.wordBits), String(last % state.wordBits), String(a_field.bitWidth)];
 }
-
-const OFFSET_HEADERS: Record<number, [string, string]> = {
-  0: ["Offset", "Byte offset of the field, or of the storage unit of a bitfield"],
-  8: ["Byte", "Byte holding the field"],
-  16: ["Word", "16-bit word holding the field, counted from 0"],
-  32: ["Word", "32-bit word holding the field, counted from 0"],
-  64: ["Word", "64-bit word holding the field, counted from 0"]
-};
 
 function addMessage(a_text: string): void {
   messages.append(createElement("li", undefined, a_text));
@@ -405,9 +367,6 @@ function valueInput(a_field: IDecodedField): HTMLInputElement {
 
 function renderFields(a_model: IModel): void {
   fieldsBody.replaceChildren();
-  const [offsetTitle, offsetHelp] = OFFSET_HEADERS[state.offsetWord];
-  offsetHeader.textContent = offsetTitle;
-  offsetHeader.title = offsetHelp;
   for (const field of a_model.decoded) {
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
     if (field.raw === undefined) {
@@ -663,13 +622,13 @@ onHostMessage((a_message) => {
   update();
 });
 
-const showAlignment = bindSegmented<"natural" | "packed">(byId("alignment"), (a_alignment) => {
-  state.alignment = a_alignment;
+const showWordBits = bindSegmented<string>(byId("wordBits"), (a_bits) => {
+  state.wordBits = Number(a_bits);
   update();
 });
 
 function showLayouts(): void {
-  showAlignment(state.alignment);
+  showWordBits(String(state.wordBits));
   showEndianness(state.endianness);
   showBitOrder(state.bitOrder);
   showTargetEndianness(state.targetEndianness);

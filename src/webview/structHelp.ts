@@ -42,10 +42,6 @@ export function buildStructHelp(): HTMLElement {
 
   const syntax = createElement("pre", "code");
   syntax.textContent = [
-    "#pragma pack(push, 1)      // alignment of the structures below: 1, 2, 4, 8, 16",
-    "#pragma pack(pop)          // also #pragma pack(N), #pragma pack()",
-    "struct __attribute__((packed)) P { uint8_t a; uint32_t b; };",
-    "",
     "typedef uint32_t t_date;   // alias of a scalar, enum or structure type",
     "",
     "enum Kind : uint8_t {      // underlying type, int when omitted",
@@ -83,13 +79,14 @@ export function buildStructHelp(): HTMLElement {
       "An enum value is shown as NAME (value); type a name, a value or an expression to change it.",
       "Pointers, unions and structures defined inside another one are not supported."
     ])),
-    section("Layout", list([
-      "Alignment: Natural (the C rule: each field at a multiple of its size, a structure at a multiple of its largest member) or Packed (no padding), unless #pragma pack or a packed attribute says otherwise.",
-      "The bytes added by the alignment show as (padding) rows.",
-      "Plain fields and bitfield storage units are read in the chosen byte order (LE / BE).",
-      "Consecutive bitfields share a unit of their type size while they fit (MSVC rule).",
-      "Inside a unit, bitfields start at bit 0: the LSB in LSB0, the MSB in MSB0.",
-      "Offset in: the word (default 32 bits) or byte holding the field, Bit min / Bit max its bits inside that word, restarting at 0 with each word (relative to the field when it spans words); or the byte of the storage unit and the bits inside it."
+    section("Layout (ICD, no compiler rule)", list([
+      "The message is a sequence of words of the size chosen with Word (32 bits by default).",
+      "Fields follow each other bit by bit in the current word; only their width counts (type size, or bit width).",
+      "A field that does not fit in the rest of the word starts the next word: no field straddles two words.",
+      "A nested structure starts a word and fills whole words. ': 0' moves to the next word.",
+      "Each word is stored in the chosen byte order (LE / BE), fields allocated from its bit 0: the LSB in LSB0, the MSB in MSB0.",
+      "Word / Bit min / Bit max: the word of the field and its bits inside it, from 0 in each word.",
+      "#pragma lines and __attribute__ annotations are ignored."
     ])),
     section("Buffer", list([
       "Hex bytes: 01 02 0A FF, 0x01, 0x02, \\x01\\x02, { 0x1, 0x2 } or 01020AFF.",

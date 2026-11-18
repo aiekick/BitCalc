@@ -58,6 +58,9 @@ export interface IStructLayout {
 export interface IAlignment {
   readonly pack: number;
   readonly defaultPack: number;
+  /// ICD layout in words of this many bits (see layoutIcd); the packs are
+  /// then ignored
+  readonly icdWordBits?: number;
 }
 
 export const PACKED: IAlignment = { pack: 1, defaultPack: 1 };
@@ -66,6 +69,11 @@ export const NATURAL: IAlignment = { pack: Infinity, defaultPack: Infinity };
 /// Alignment of a structure: its own pack, else the default one.
 export function alignmentFor(a_pack: number | undefined, a_defaultPack: number): IAlignment {
   return { pack: a_pack ?? a_defaultPack, defaultPack: a_defaultPack };
+}
+
+/// ICD layout: the message is a sequence of words of a_wordBits bits.
+export function icdAlignment(a_wordBits: number): IAlignment {
+  return { pack: 1, defaultPack: 1, icdWordBits: a_wordBits };
 }
 
 const PADDING_TYPE: IScalarType = { size: 1, signed: false, kind: "int" };
@@ -91,7 +99,78 @@ interface IStorageUnit {
 /// by the parser; this only bounds the work)
 const MAX_NESTING = 32;
 
+/// Interface control document layout: the structure is a sequence of words
+/// of a_wordBits bits. The fields follow each other bit by bit inside the
+/// current word, whatever their type: only their width counts (the size of
+/// their type, or their bit width). A field that does not fit in the rest of
+/// the word starts the next word; a field wider than a word starts a word
+/// and spans several. A nested structure starts a word and fills whole
+/// words. `: 0` moves to the next word. Each word is stored with the byte
+/// order, and its bits are allocated from bit 0 (LSB in lsb0, MSB in msb0).
+function layoutIcd(a_fields: readonly IFieldDef[], a_wordBits: number, a_depth: number): IStructLayout {
+  const wordBytes = a_wordBits / 8;
+  const slots: IFieldSlot[] = [];
+  let bit = 0;
+  const nextWord = (): void => {
+    bit = Math.ceil(bit / a_wordBits) * a_wordBits;
+  };
+
+  for (const field of a_fields) {
+    const count = field.count ?? 1;
+    const elementName = (a_index: number): string | undefined =>
+      field.count === undefined ? field.name : `${field.name}[${a_index}]`;
+
+    if (field.structDef !== undefined) {
+      if (a_depth >= MAX_NESTING) {
+        continue;
+      }
+      const inner = layoutIcd(field.structDef.fields, a_wordBits, a_depth + 1);
+      for (let elementIndex = 0; elementIndex < count; elementIndex++) {
+        nextWord();
+        const prefix = elementName(elementIndex);
+        for (const slot of inner.slots) {
+          slots.push({
+            ...slot,
+            name: slot.name === undefined ? undefined : `${prefix}.${slot.name}`,
+            byteOffset: bit / 8 + slot.byteOffset
+          });
+        }
+        bit += inner.size * 8;
+      }
+      continue;
+    }
+    if (field.bits === 0) {
+      nextWord();
+      continue;
+    }
+    const width = field.bits ?? field.type.size * 8;
+    for (let elementIndex = 0; elementIndex < count; elementIndex++) {
+      const used = bit % a_wordBits;
+      if (used !== 0 && (width > a_wordBits || used + width > a_wordBits)) {
+        nextWord();
+      }
+      const wordStart = Math.floor(bit / a_wordBits) * a_wordBits;
+      slots.push({
+        name: field.bits === undefined ? elementName(elementIndex) : field.name,
+        typeName: field.typeName,
+        type: field.type,
+        enumDef: field.enumDef,
+        byteOffset: wordStart / 8,
+        unitSize: Math.ceil(width / a_wordBits) * wordBytes,
+        bitOffset: bit - wordStart,
+        bitWidth: width
+      });
+      bit += width;
+    }
+  }
+  nextWord();
+  return { slots, size: bit / 8, align: wordBytes };
+}
+
 export function layoutStruct(a_fields: readonly IFieldDef[], a_alignment: IAlignment = PACKED, a_depth = 0): IStructLayout {
+  if (a_alignment.icdWordBits !== undefined) {
+    return layoutIcd(a_fields, a_alignment.icdWordBits, a_depth);
+  }
   const slots: IFieldSlot[] = [];
   let offset = 0;
   let maxAlign = 1;
