@@ -213,6 +213,16 @@ export function convertStruct(
   return encodeStruct(decoded.fields, decoded.size, a_to);
 }
 
+/// Whether a field is read as signed. An enum is signed only when one of its
+/// enumerators is negative, whatever its underlying type: an enum bitfield of
+/// 1 bit holding 1 is 1, not -1 (what GCC does for enum bitfields).
+export function isSignedSlot(a_slot: IFieldSlot): boolean {
+  if (a_slot.enumDef !== undefined) {
+    return a_slot.enumDef.members.some((a_member) => a_member.value < 0n);
+  }
+  return a_slot.type.signed;
+}
+
 /// Value of a decoded field according to its type.
 export function fieldValue(a_field: IDecodedField): bigint | number | boolean | undefined {
   if (a_field.raw === undefined) {
@@ -224,7 +234,7 @@ export function fieldValue(a_field: IDecodedField): bigint | number | boolean | 
     case "float":
       return rawToFloat(a_field.raw, a_field.type.size);
     case "int":
-      return a_field.type.signed ? toSigned(a_field.raw, a_field.bitWidth) : a_field.raw;
+      return isSignedSlot(a_field) ? toSigned(a_field.raw, a_field.bitWidth) : a_field.raw;
   }
 }
 

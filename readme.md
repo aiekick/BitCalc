@@ -76,7 +76,7 @@ struct Message {
 
 The declarations are coloured as you type, and the lines with an error are underlined. **Format** (or `Shift+Alt+F` in the structure) indents them and aligns the types, names, bit widths, enumerator values and trailing comments in columns; `Ctrl+Z` undoes it. Text that cannot be formatted without changing it, such as a missing `}`, is left as is.
 
-Enumerators take a number or an expression that may use earlier enumerators (`KIND_C = KIND_A << 4`). An enum field is stored as its underlying type, can be a bitfield, and its value is shown as `NAME (value)`.
+Enumerators take a number or an expression that may use earlier enumerators (`KIND_C = KIND_A << 4`). An enum field is stored as its underlying type, can be a bitfield, and its value is shown as `NAME (value)`. It is read as signed only when the enum has a negative enumerator, so a 1 bit enum bitfield holding 1 is 1.
 
 The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, an enum with nested structures, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
 

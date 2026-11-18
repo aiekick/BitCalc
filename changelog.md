@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.10] - 2026-11-18
+
+### Fixed
+
+- Struct Decoder: an enum bitfield whose top bit is set was read as negative (a 1 bit enum holding 1 showed -1 (no enumerator)). An enum field is now signed only when the enum has a negative enumerator.
+
 ## [0.0.9] - 2026-11-18
 
 ### Changed

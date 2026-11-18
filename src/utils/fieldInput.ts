@@ -1,6 +1,6 @@
 import { toUnsigned } from "./bits";
 import { evaluate } from "./expression";
-import { IFieldSlot, floatToRaw } from "./structDecode";
+import { IFieldSlot, floatToRaw, isSignedSlot } from "./structDecode";
 
 /// Turn the text typed for a field into its raw bits. Integers accept the
 /// calculator expressions (0x1F, -1, 1 << 3...) and, for an enum, its
@@ -32,7 +32,7 @@ export function parseFieldInput(a_slot: IFieldSlot, a_text: string): bigint {
       const resolve = members === undefined
         ? undefined
         : (a_name: string): bigint | undefined => members.find((a_member) => a_member.name === a_name)?.value;
-      return toUnsigned(evaluate(enumText, { width: a_slot.bitWidth, signed: a_slot.type.signed, resolve }), a_slot.bitWidth);
+      return toUnsigned(evaluate(enumText, { width: a_slot.bitWidth, signed: isSignedSlot(a_slot), resolve }), a_slot.bitWidth);
     }
   }
 }

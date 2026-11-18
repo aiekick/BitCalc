@@ -104,3 +104,27 @@ describe("nested structures", () => {
     assert.match(parseStruct("struct A { int a; };\nstruct B { A a : 3; };").errors[0].message, /a structure cannot be a bitfield/);
   });
 });
+
+describe("enum bitfields", () => {
+  const DEFINITION = `
+    enum Bool { B_FALSE, B_TRUE };
+    enum Mode : uint8_t { M_A = 0, M_B = 2, M_C = 3 };
+    enum Delta { D_MINUS = -1, D_ZERO, D_PLUS };
+    struct S { Bool flag : 1; Mode mode : 2; Delta delta : 2; };`;
+
+  test("are unsigned unless the enum has a negative enumerator", () => {
+    const parsed = parseStruct(DEFINITION);
+    assert.deepEqual(parsed.errors, []);
+    // each enum type size opens its own unit (int, uint8_t, int): flag = 1, mode = 3, delta = 0b11 (-1)
+    const bytes = Uint8Array.from([0x01, 0, 0, 0, 0x03, 0x03, 0, 0, 0]);
+    const fields = decodeStruct(parsed.fields, bytes, { endianness: "little", bitOrder: "lsb0" }).fields;
+    const [flag, mode, delta] = fields;
+    assert.equal(fieldValue(flag), 1n);
+    assert.equal(enumeratorName(flag.enumDef!, fieldValue(flag) as bigint), "B_TRUE");
+    assert.equal(enumeratorName(mode.enumDef!, fieldValue(mode) as bigint), "M_C");
+    assert.equal(fieldValue(delta), -1n);
+    assert.equal(enumeratorName(delta.enumDef!, fieldValue(delta) as bigint), "D_MINUS");
+    assert.equal(parseFieldInput(flag, "B_TRUE"), 1n);
+    assert.equal(parseFieldInput(delta, "D_MINUS"), 3n);
+  });
+});
