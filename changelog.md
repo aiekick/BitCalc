@@ -4,6 +4,13 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.3] - 2026-11-18
+
+### Added
+
+- Struct Decoder: Format button (Shift+Alt+F) that indents the declarations and aligns types, names, bit widths, enumerator values and trailing comments; Ctrl+Z undoes it, and text that cannot be formatted without changing it is left untouched.
+- Struct Decoder: syntax highlighting of the declarations (keywords, types, declared structures and enums, enumerators, numbers, comments), lines with an error underlined.
+
 ## [0.0.2] - 2026-11-18
 
 ### Added

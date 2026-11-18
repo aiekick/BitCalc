@@ -2,6 +2,7 @@ import { BitOrder, Endianness, formatBits, groupDigits } from "../utils/bits";
 import { parseFieldInput } from "../utils/fieldInput";
 import { formatCArray, formatHexBytes, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
+import { formatDeclarations } from "../utils/structFormat";
 import {
   IDecodedField,
   ILayoutOptions,
@@ -11,6 +12,7 @@ import {
   fieldValue,
   writeSlot
 } from "../utils/structDecode";
+import { CodeEditor } from "./codeEditor";
 import { buildStructHelp } from "./structHelp";
 import { STRUCT_TEMPLATES } from "./structTemplates";
 import {
@@ -88,6 +90,7 @@ byId("app").innerHTML = `
           <option value="" selected>Template…</option>
           ${STRUCT_TEMPLATES.map((a_template, a_index) => `<option value="${a_index}">${a_template.label}</option>`).join("")}
         </select>
+        <button id="format" title="Format the declarations (Shift+Alt+F), Ctrl+Z undoes it">Format</button>
         <button id="helpToggle" class="help-toggle" title="Supported types and syntax" aria-expanded="false">?</button>
       </div>
       <textarea id="definition" spellcheck="false" rows="8"></textarea>
@@ -135,6 +138,7 @@ const fieldsBody = byId("fields");
 const conversionTitle = byId("conversionTitle");
 const byteGrid = byId("byteGrid");
 const rootSelect = byId<HTMLSelectElement>("rootStruct");
+const definitionEditor = new CodeEditor(definitionInput);
 
 function sourceLayout(): ILayoutOptions {
   return { endianness: state.endianness, bitOrder: state.bitOrder };
@@ -165,6 +169,7 @@ let model: IModel | undefined;
 function computeModel(): IModel {
   messages.replaceChildren();
   const parsed = parseStruct(state.definition, state.rootStruct === "" ? undefined : state.rootStruct);
+  definitionEditor.render(state.definition, parsed);
   const structNames = parsed.structs.flatMap((a_struct) => (a_struct.name !== undefined ? [a_struct.name] : []));
   rootSelect.hidden = structNames.length < 2;
   rootSelect.replaceChildren(...structNames.map((a_name) => createElement("option", undefined, a_name)));
@@ -407,6 +412,25 @@ function replaceDefinition(a_text: string): void {
   definitionInput.scrollTop = 0;
   state.definition = definitionInput.value;
 }
+
+function formatDefinition(): void {
+  const result = formatDeclarations(state.definition);
+  if (result.error === undefined && result.text !== state.definition) {
+    replaceDefinition(result.text);
+  }
+  update();
+  if (result.error !== undefined) {
+    addMessage(result.error);
+  }
+}
+
+byId("format").addEventListener("click", formatDefinition);
+definitionInput.addEventListener("keydown", (a_event) => {
+  if (a_event.shiftKey && a_event.altKey && a_event.code === "KeyF") {
+    a_event.preventDefault();
+    formatDefinition();
+  }
+});
 
 const helpBox = buildStructHelp();
 helpBox.hidden = true;
