@@ -1,0 +1,17 @@
+# Change Log
+
+All notable changes to the "BitCalc" extension will be documented in this file.
+
+Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+
+## [0.0.1] - 2026-11-18
+
+### Added
+
+- BitCalc tab in the bottom panel, with a Calculator view and a Struct Decoder view.
+- Calculator: 8 to 128 bit words, signed or unsigned, HEX / DEC / OCT / BIN fields kept in sync, clickable bits with LSB0 or MSB0 numbering, memory bytes in little or big endian, NOT, NEG, shifts, rotations, byte swap, and integer expressions with C precedence.
+- Struct Decoder: C structure definitions with bitfields, arrays and padding, decoding of a hex buffer in little or big endian with LSB0 or MSB0 bitfield allocation, each field shown in decimal, hex, octal and binary.
+- Struct Decoder templates: empty structure, bitfields example, IPv4 and UDP headers, RGB565 pixel, IEEE 754 float and double fields.
+- Struct Decoder help (? button): supported types, syntax, layout rules and buffer formats.
+- Editor commands: Evaluate Selection in Calculator, Decode Selection as Buffer, Use Selection as Structure.
+- Settings for the initial word size, signed mode, byte order and bit numbering.

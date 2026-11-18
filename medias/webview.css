@@ -1,0 +1,99 @@
+/* Shared style of the BitCalc webviews, built on the VS Code theme variables. */
+body {
+  padding: 6px 10px;
+  color: var(--vscode-foreground);
+  background: var(--vscode-panel-background, var(--vscode-editor-background));
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+button {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+
+input, select, textarea {
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  padding: 2px 4px;
+}
+input:focus, select:focus, textarea:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+input.invalid { border-color: var(--vscode-inputValidation-errorBorder); }
+input.truncated { border-color: var(--vscode-inputValidation-warningBorder); }
+textarea, .radix-input, #expression, .fields .value, .bit, .byte-cell {
+  font-family: var(--vscode-editor-font-family);
+}
+textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-bottom: 8px; }
+.toolbar label { display: flex; align-items: center; gap: 4px; }
+.segmented { display: inline-flex; }
+.segmented button { border-radius: 0; }
+.segmented button:first-child { border-radius: 2px 0 0 2px; }
+.segmented button:last-child { border-radius: 0 2px 2px 0; }
+.segmented button.pressed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.offset { width: 5em; }
+
+.expression { display: flex; gap: 4px; }
+#expression { flex: 1; min-width: 0; }
+.error, .messages { color: var(--vscode-errorForeground); min-height: 1.2em; margin: 2px 0 4px; }
+.messages { padding-left: 1.2em; }
+.messages:empty { min-height: 0; margin: 0; }
+
+.radix-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; margin-bottom: 8px; }
+.radix-label { font-weight: bold; opacity: 0.8; }
+.radix-input { min-width: 0; }
+.copy { font-size: 0.85em; }
+
+.ops { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+
+.bits { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.bit-row { display: flex; }
+.bit-cell { display: flex; flex-direction: column; align-items: center; width: 1.7em; }
+.bit-cell.nibble-end { margin-right: 0.6em; }
+.bit-cell.byte-end { margin-right: 1.2em; }
+.bit { width: 1.6em; padding: 1px 0; background: transparent; border-color: var(--vscode-input-border, var(--vscode-widget-border, #8884)); }
+.bit.on { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.bit-index { font-size: 0.75em; opacity: 0.6; }
+
+.section-title { display: block; font-weight: bold; opacity: 0.8; margin: 4px 0; }
+.bytes { display: flex; flex-wrap: wrap; gap: 4px; }
+.byte-cell { display: flex; flex-direction: column; align-items: center; padding: 2px 6px; border: 1px solid var(--vscode-widget-border, #8884); border-radius: 2px; }
+.byte-offset { font-size: 0.75em; opacity: 0.6; }
+
+.split { display: flex; flex-wrap: wrap; gap: 10px; }
+.split .pane { flex: 1 1 260px; min-width: 0; }
+.summary { margin: 6px 0; opacity: 0.85; }
+.summary.warning { color: var(--vscode-editorWarning-foreground); opacity: 1; }
+.table-wrap { overflow-x: auto; }
+.fields { border-collapse: collapse; width: 100%; }
+.fields th, .fields td { text-align: left; padding: 2px 8px; border-bottom: 1px solid var(--vscode-widget-border, #8883); white-space: nowrap; }
+.fields th { font-weight: bold; opacity: 0.8; }
+.fields tr.padding td { opacity: 0.55; font-style: italic; }
+.fields tr.missing td.value { color: var(--vscode-editorWarning-foreground); }
+.pane-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pane-header select { margin-left: auto; }
+.help-toggle { min-width: 1.8em; font-weight: bold; }
+.help-toggle.pressed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.help {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border: 1px solid var(--vscode-widget-border, #8884);
+  border-radius: 2px;
+  background: var(--vscode-textBlockQuote-background, transparent);
+}
+.help[hidden] { display: none; }
+.help h4 { margin: 8px 0 4px; }
+.help ul { margin: 4px 0; padding-left: 1.2em; }
+.help pre { margin: 4px 0; white-space: pre-wrap; }
+.help .code { font-family: var(--vscode-editor-font-family); }
+.help-types td { padding: 1px 12px 1px 0; vertical-align: top; }
+.help-types td:first-child { white-space: nowrap; opacity: 0.8; }

@@ -1,0 +1,98 @@
+# BitCalc
+
+A programmer calculator and a bitfield structure decoder, in the VS Code panel: hex, decimal, octal and binary views of a value, clickable bits, little or big endian, LSB0 or MSB0 bit numbering.
+
+![VS Code](https://img.shields.io/badge/VS%20Code-^1.80.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+## Where to find it
+
+BitCalc adds a **BitCalc** tab to the bottom panel, next to Terminal and Output, with two views: **Calculator** and **Struct Decoder**. You can drag either view to the side bar. The commands `BitCalc: Open Calculator` and `BitCalc: Open Struct Decoder` open them from the Command Palette.
+
+Both views keep their content when you close and reopen them.
+
+## Calculator
+
+Works like the programmer mode of the Windows calculator.
+
+- **Word size**: 8, 16, 32, 64 or 128 bits. Every result is truncated to that size.
+- **Signed**: the decimal value and the operations use two's complement. Unchecked, the value is unsigned.
+- **HEX, DEC, OCT, BIN**: type in any of the four fields, the others follow. Spaces, `_` and `'` are digit separators and the `0x`, `0o`, `0b` prefixes are accepted. A field turns red when the text is not a number, and orange when the value had to be truncated to the word size. **Copy** copies the value without separators, with its C prefix (`0x`, `0`, `0b`).
+- **Bits**: click a bit to toggle it. The most significant bit is at the top left. The number under each bit is its index: counted from the least significant bit in **LSB0**, from the most significant bit in **MSB0**.
+- **Memory**: the bytes of the value in memory order, for **LE** (little endian) or **BE** (big endian).
+- **Operations**: `NOT`, `NEG` (two's complement negation), `<< 1`, `>> 1` (arithmetic shift when signed), `ROL` and `ROR` (rotation by one bit within the word), `SWAP` (reverse the byte order), `CLR`.
+
+### Expressions
+
+The expression field evaluates integer expressions when you press `Enter`:
+
+| Element | Syntax |
+|---|---|
+| Literals | `42`, `0x2A`, `0o52`, `0b101010`, with `_` as separator |
+| Unary | `-x`, `+x`, `~x` |
+| Binary, by decreasing precedence | `*` `/` `%`, then `+` `-`, then `<<` `>>`, then `&`, then `^`, then `|` |
+| Grouping | `( )` |
+
+The precedence is the one of C. Every intermediate result is truncated to the word size, so in 8 bits signed `127 + 1` gives `-128`. Division truncates towards zero. On error, the message gives the column.
+
+## Struct Decoder
+
+Decodes a raw buffer with a C structure definition, bitfields included. Each field is shown in decimal, hex, octal and binary.
+
+**Structure**: a C `struct` with its braces, a `typedef struct { ... } Name;`, or a plain list of fields. Comments are allowed.
+
+```c
+struct Header {
+    uint8_t  version : 4;   // bitfield
+    uint8_t          : 2;   // anonymous padding bits
+    uint8_t  flags   : 2;
+    uint16_t length;        // plain field
+    uint8_t  data[4];       // array
+    float    gain;
+};
+```
+
+The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
+
+Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Pointers, nested structures and unions are not supported.
+
+**Buffer**: hex bytes written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`. **Offset** skips the given number of bytes before the structure.
+
+**Layout rules**, chosen to be predictable:
+
+- The structure is packed: no alignment padding is added. Write the padding fields yourself when the real structure has some.
+- Plain fields are read with the chosen byte order (**LE** or **BE**).
+- Consecutive bitfields share a storage unit of the size of their declared type while they fit in it. A bitfield of another type size, a bitfield that does not fit, a plain field or a `: 0` bitfield starts a new unit. This is what MSVC does; GCC and Clang can also mix types in one unit.
+- The storage unit is read with the chosen byte order, then the bitfields are allocated from its bit 0: the least significant bit in **LSB0**, the most significant one in **MSB0**.
+
+Each row shows the offset (`+byte` for a plain field, `+byte.bit` for a bitfield, the bit being numbered in the chosen bit order inside its unit), the width in bits with the bit range, and the value. Signed fields are sign extended. Fields the buffer is too short for show `—`.
+
+## From the editor
+
+Right-click in the editor and open the **BitCalc** submenu, or use the Command Palette:
+
+| Command | What it does |
+|---|---|
+| Evaluate Selection in Calculator | Evaluates the selection (or the number under the cursor) in the calculator |
+| Decode Selection as Buffer | Puts the selected hex bytes in the struct decoder buffer |
+| Use Selection as Structure | Puts the selected C structure in the struct decoder |
+
+## Settings
+
+These settings give the state of the views the first time they open; after that, each view remembers its own choices.
+
+| Setting | Default | Description |
+|---|---|---|
+| `bitcalc.wordSize` | `64` | Word size of the calculator: 8, 16, 32, 64 or 128 |
+| `bitcalc.signed` | `true` | Signed (two's complement) mode of the calculator |
+| `bitcalc.endianness` | `little` | Byte order: `little` or `big` |
+| `bitcalc.bitOrder` | `lsb0` | Bit numbering: `lsb0` or `msb0` |
+
+## Build
+
+```sh
+npm install
+npm run check     # type check
+npm test          # unit tests
+npm run package   # builds the bitcalc-<version>.vsix
+```

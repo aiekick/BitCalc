@@ -1,0 +1,184 @@
+{
+  "name": "bitcalc",
+  "displayName": "BitCalc",
+  "description": "Programmer calculator and bitfield structure decoder: hex, decimal, octal, binary, bit toggling, LE/BE, LSB0/MSB0",
+  "version": "0.0.1",
+  "publisher": "aiekick",
+  "galleryBanner": {
+    "color": "#1e1e28",
+    "theme": "dark"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aiekick/bitcalc"
+  },
+  "keywords": [
+    "bits",
+    "bitfield",
+    "base",
+    "hex",
+    "binary",
+    "octal",
+    "calculator",
+    "programmer",
+    "endianness",
+    "struct"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "bitcalc",
+          "title": "BitCalc",
+          "icon": "medias/bitcalc.svg"
+        }
+      ]
+    },
+    "views": {
+      "bitcalc": [
+        {
+          "type": "webview",
+          "id": "bitcalc.calculator",
+          "name": "Calculator"
+        },
+        {
+          "type": "webview",
+          "id": "bitcalc.struct",
+          "name": "Struct Decoder"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "bitcalc.openCalculator",
+        "title": "Open Calculator",
+        "category": "BitCalc"
+      },
+      {
+        "command": "bitcalc.openStructDecoder",
+        "title": "Open Struct Decoder",
+        "category": "BitCalc"
+      },
+      {
+        "command": "bitcalc.evaluateSelection",
+        "title": "Evaluate Selection in Calculator",
+        "category": "BitCalc"
+      },
+      {
+        "command": "bitcalc.decodeSelectionAsBuffer",
+        "title": "Decode Selection as Buffer",
+        "category": "BitCalc"
+      },
+      {
+        "command": "bitcalc.useSelectionAsStructure",
+        "title": "Use Selection as Structure",
+        "category": "BitCalc"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "bitcalc.contextMenu",
+        "label": "BitCalc"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "submenu": "bitcalc.contextMenu",
+          "group": "1_modification@110",
+          "when": "editorTextFocus"
+        }
+      ],
+      "bitcalc.contextMenu": [
+        {
+          "command": "bitcalc.evaluateSelection",
+          "group": "1_calc@1"
+        },
+        {
+          "command": "bitcalc.decodeSelectionAsBuffer",
+          "group": "2_struct@1",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "bitcalc.useSelectionAsStructure",
+          "group": "2_struct@2",
+          "when": "editorHasSelection"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "BitCalc",
+      "properties": {
+        "bitcalc.wordSize": {
+          "type": "number",
+          "enum": [
+            8,
+            16,
+            32,
+            64,
+            128
+          ],
+          "default": 64,
+          "description": "Word size in bits of the calculator when it opens for the first time."
+        },
+        "bitcalc.signed": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the calculator starts in signed (two's complement) mode."
+        },
+        "bitcalc.endianness": {
+          "type": "string",
+          "enum": [
+            "little",
+            "big"
+          ],
+          "enumDescriptions": [
+            "Least significant byte first",
+            "Most significant byte first"
+          ],
+          "default": "little",
+          "description": "Byte order used by the calculator and the struct decoder when they open for the first time."
+        },
+        "bitcalc.bitOrder": {
+          "type": "string",
+          "enum": [
+            "lsb0",
+            "msb0"
+          ],
+          "enumDescriptions": [
+            "Bit 0 is the least significant bit",
+            "Bit 0 is the most significant bit"
+          ],
+          "default": "lsb0",
+          "description": "Bit numbering used by the calculator and the struct decoder when they open for the first time."
+        }
+      }
+    }
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "browser": "./out/web/extension.js",
+  "scripts": {
+    "check": "tsc --noEmit -p ./",
+    "compile": "node ./scripts/clean.js && tsc -p ./ && node ./scripts/esbuild.js",
+    "package": "node ./scripts/clean.js && node ./scripts/esbuild.js --production && node ./scripts/package.js",
+    "watch": "tsc -watch -p ./",
+    "test": "tsc -p tsconfig.tests.json && node --test out-tests/tests/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.9.3"
+  }
+}
