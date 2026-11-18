@@ -161,3 +161,4 @@ textarea.invalid { border-color: var(--vscode-inputValidation-errorBorder); }
 .data .pane-header { margin-top: 6px; }
 .data .copy-group { margin-left: auto; }
 .offset-label { display: flex; align-items: center; gap: 4px; }
+.fields td.number { text-align: right; font-variant-numeric: tabular-nums; }

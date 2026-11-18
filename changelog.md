@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.9] - 2026-11-18
+
+### Changed
+
+- Struct Decoder field table: Bit min, Bit max and Bits columns instead of a single Bits column; Offset only gives the byte.
+
 ## [0.0.8] - 2026-11-18
 
 ### Changed

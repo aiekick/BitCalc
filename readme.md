@@ -91,7 +91,7 @@ Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `ui
 - Consecutive bitfields share a storage unit of the size of their declared type while they fit in it. A bitfield of another type size, a bitfield that does not fit, a plain field or a `: 0` bitfield starts a new unit. This is what MSVC does; GCC and Clang can also mix types in one unit.
 - The storage unit is read with the chosen byte order, then the bitfields are allocated from its bit 0: the least significant bit in **LSB0**, the most significant one in **MSB0**.
 
-Each row shows the offset (`+byte` for a plain field, `+byte.bit` for a bitfield, the bit being numbered in the chosen bit order inside its unit), the width in bits with the bit range, and the value. Signed fields are sign extended. Fields the buffer is too short for are empty.
+Each row shows the byte **Offset** of the field (of its storage unit for a bitfield), **Bit min** and **Bit max**, its first and last bits numbered in the From bit order inside the storage unit (inside the field itself for a plain field), its width in **Bits**, and the value. Signed fields are sign extended. Fields the buffer is too short for are empty.
 
 ### Converting between layouts
 

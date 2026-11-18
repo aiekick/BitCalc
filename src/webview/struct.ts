@@ -100,7 +100,11 @@ byId("app").innerHTML = `
   <div class="table-wrap">
     <table class="fields">
       <thead><tr>
-        <th>Offset</th><th>Bits</th><th>Field</th><th>Type</th>
+        <th title="Byte offset of the field, or of the storage unit of a bitfield">Offset</th>
+        <th title="First bit, numbered in the From bit order inside the storage unit (inside the field for a plain field)">Bit min</th>
+        <th title="Last bit, numbered in the From bit order inside the storage unit (inside the field for a plain field)">Bit max</th>
+        <th title="Width in bits">Bits</th>
+        <th>Field</th><th>Type</th>
         <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated">DEC ✎</th>
         <th>HEX</th><th>OCT</th><th>BIN</th>
       </tr></thead>
@@ -205,17 +209,12 @@ function computeModel(): IModel {
   };
 }
 
-function offsetText(a_field: IDecodedField): string {
-  return a_field.bitOffset === undefined ? `+${a_field.byteOffset}` : `+${a_field.byteOffset}.${a_field.bitOffset}`;
-}
-
-function bitsText(a_field: IDecodedField): string {
-  if (a_field.bitOffset === undefined) {
-    return String(a_field.bitWidth);
-  }
-  const last = a_field.bitOffset + a_field.bitWidth - 1;
-  const range = a_field.bitWidth === 1 ? `${a_field.bitOffset}` : `${a_field.bitOffset}..${last}`;
-  return `${a_field.bitWidth} [${range}]`;
+/// Offset, first bit, last bit and width of a field. The bits are numbered
+/// in the From bit order inside the storage unit of a bitfield, or inside
+/// the field itself for a plain field.
+function placementCells(a_field: IDecodedField): string[] {
+  const bitMin = a_field.bitOffset ?? 0;
+  return [`+${a_field.byteOffset}`, String(bitMin), String(bitMin + a_field.bitWidth - 1), String(a_field.bitWidth)];
 }
 
 function addMessage(a_text: string): void {
@@ -338,7 +337,10 @@ function renderFields(a_model: IModel): void {
       row.classList.add("missing");
       row.title = "The buffer is too short for this field";
     }
-    for (const text of [offsetText(field), bitsText(field), field.name ?? "(padding)", field.typeName]) {
+    for (const text of placementCells(field)) {
+      row.append(createElement("td", "number", text));
+    }
+    for (const text of [field.name ?? "(padding)", field.typeName]) {
       row.append(createElement("td", undefined, text));
     }
     const valueCell = createElement("td", "value");
