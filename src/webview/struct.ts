@@ -129,8 +129,8 @@ byId("app").innerHTML = `
     <table class="fields">
       <thead><tr>
         <th id="offsetHeader">Offset</th>
-        <th title="First bit, counted from the start of the structure (the first byte holds bits 0 to 7)">Bit min</th>
-        <th title="Last bit, counted from the start of the structure">Bit max</th>
+        <th title="First bit inside the word (or byte, or storage unit) of the first column; the count restarts at 0 with each word">Bit min</th>
+        <th title="Last bit inside its word (or byte, or storage unit)">Bit max</th>
         <th title="Width in bits">Bits</th>
         <th>Field</th><th>Type</th>
         <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated">DEC ✎</th>
@@ -261,20 +261,24 @@ function computeModel(): IModel {
 }
 
 /// Offset, first bit, last bit and width of a field. The bits are counted
-/// from the start of the structure in allocation order: the first byte holds
-/// bits 0..7, the second 8..15, a bitfield its unit's first bit plus its
-/// place in the unit. The offset is the word (or byte) holding the first and
-/// last bits, or the byte of the storage unit.
+/// in allocation order (the first byte holds bits 0..7, a bitfield sits at
+/// the first bit of its unit plus its place in the unit) and restart at 0
+/// with each word: with 32-bit words, bit 31 is followed by bit 0 of the next
+/// word. A field spanning words shows the word range and its first and last
+/// bits in their own words. With storage units, the offset is the byte of the
+/// unit and the bits are numbered inside the unit.
 function placementCells(a_field: IDecodedField): string[] {
-  const bitMin = a_field.byteOffset * 8 + (a_field.bitOffset ?? 0);
-  const bitMax = bitMin + a_field.bitWidth - 1;
-  let offset = `+${a_field.byteOffset}`;
-  if (state.offsetWord !== 0) {
-    const firstWord = Math.floor(bitMin / state.offsetWord);
-    const lastWord = Math.floor(bitMax / state.offsetWord);
-    offset = firstWord === lastWord ? String(firstWord) : `${firstWord}–${lastWord}`;
+  const width = String(a_field.bitWidth);
+  if (state.offsetWord === 0) {
+    const bitMin = a_field.bitOffset ?? 0;
+    return [`+${a_field.byteOffset}`, String(bitMin), String(bitMin + a_field.bitWidth - 1), width];
   }
-  return [offset, String(bitMin), String(bitMax), String(a_field.bitWidth)];
+  const first = a_field.byteOffset * 8 + (a_field.bitOffset ?? 0);
+  const last = first + a_field.bitWidth - 1;
+  const firstWord = Math.floor(first / state.offsetWord);
+  const lastWord = Math.floor(last / state.offsetWord);
+  const offset = firstWord === lastWord ? String(firstWord) : `${firstWord}–${lastWord}`;
+  return [offset, String(first % state.offsetWord), String(last % state.offsetWord), width];
 }
 
 const OFFSET_HEADERS: Record<number, [string, string]> = {

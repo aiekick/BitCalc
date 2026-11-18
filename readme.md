@@ -91,7 +91,10 @@ Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `ui
 - Consecutive bitfields share a storage unit of the size of their declared type while they fit in it. A bitfield of another type size, a bitfield that does not fit, a plain field or a `: 0` bitfield starts a new unit. This is what MSVC does; GCC and Clang can also mix types in one unit.
 - The storage unit is read with the chosen byte order, then the bitfields are allocated from its bit 0: the least significant bit in **LSB0**, the most significant one in **MSB0**.
 
-Each row shows where the field lies, its width in **Bits**, and the value. **Bit min** and **Bit max** are its first and last bits counted from the start of the structure, in allocation order: the first byte holds bits 0 to 7, the second 8 to 15, and a bitfield sits at the first bit of its storage unit plus its place in the unit. The first column depends on **Offset in**, above the table: with **32-bit words** (the default), **16-bit words**, **64-bit words** or **bytes**, it is the word (or byte) number holding the field, counted from 0, or a range such as `2–3` when the field spans words; with **storage units**, it is the byte offset of the field (of its storage unit for a bitfield).
+Each row shows where the field lies, its width in **Bits**, and the value. **Offset in**, above the table, chooses the unit of the first column:
+
+- **32-bit words** (the default), **16-bit words**, **64-bit words** or **bytes**: the first column is the word (or byte) number holding the field, counted from 0, and **Bit min** / **Bit max** are its first and last bits inside that word. The bits are counted in allocation order (the first byte holds bits 0 to 7, the second 8 to 15, a bitfield sits at the first bit of its storage unit plus its place in the unit) and restart at 0 with each word: with 32-bit words, bit 31 of word 0 is followed by bit 0 of word 1. A field spanning words shows the word range, such as `2–3`, with its first bit in the first word and its last bit in the last one.
+- **storage units**: the first column is the byte offset of the field (of its storage unit for a bitfield), and the bits are numbered inside the storage unit (inside the field itself for a plain field).
 
 ### Converting between layouts
 
