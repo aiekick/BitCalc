@@ -23,13 +23,16 @@ Works like the programmer mode of the Windows calculator.
 
 ### Converting between layouts
 
-The **From** controls give the layout of the value: bit numbering (**LSB0** or **MSB0**) and byte order (**LE** or **BE**). The **To** controls give the layout to convert it to. Each bit keeps its number: bit 3 in the From numbering is bit 3 in the To numbering, so going from LSB0 to MSB0 reverses the bits of the word, and going from LE to BE reverses its bytes.
+The **From** controls give the layout of the value: bit numbering (**LSB0** or **MSB0**) and byte order (**LE** or **BE**). The **To** controls give the layout to convert it to. **Conversion** chooses what is kept:
+
+- **Values** (the default): the value is kept; going from LE to BE reverses its bytes, and the bit numbering does not move any bit.
+- **Mirror**: each bit keeps its number: bit 3 in the From numbering is bit 3 in the To numbering, so going from LSB0 to MSB0 also reverses the bits of the word.
 
 - **Converted**: the converted value, as a reader using the From layout finds it in memory, in hex, decimal, octal and binary, with copy buttons.
 - **Memory**: the bytes of the value (From) and of its conversion (To) in memory order, the bytes that differ highlighted.
 - **⇄** swaps From and To and replaces the value by its conversion, so pressing it twice gives the value back.
 
-For instance, `0x12345678` in LE LSB0 converted to BE MSB0 gives `0x482C6A1E`: bits reversed (`0x1E6A2C48`), then bytes reversed.
+For instance, `0x12345678` in LE LSB0 converted to BE MSB0 gives `0x78563412` in Values mode (bytes reversed), and `0x482C6A1E` in Mirror mode: bits reversed (`0x1E6A2C48`), then bytes reversed.
 
 ### Expressions
 
@@ -94,7 +97,7 @@ Known types: `uint8` to `uint64` and `int8` to `int64` (also written `u8`, `i8`,
 
 `#pragma` lines and `__attribute__` annotations are ignored, so a header can be pasted as is.
 
-The field values do not depend on the layout: the table is the same for From and To, only the place of the fields in the bytes changes. **Bit min** and **Bit max** hold in both layouts, each with its own numbering (LSB0: bit 0 is the least significant bit of the word; MSB0: the most significant one), and HEX, OCT and BIN write the value most significant digit first. A line above the table recalls this.
+In the default **Values** conversion, the field values do not depend on the layout: only the place of the fields in the bytes changes. **Bit min** and **Bit max** hold in both layouts, each with its own numbering (LSB0: bit 0 is the least significant bit of the word; MSB0: the most significant one), HEX and OCT write the value of the field in From, and **BIN From** / **BIN To** its bits in the numbering of each layout (see Converting between layouts). A line above the table recalls this.
 
 Each row shows the **Word** holding the field, counted from 0, **Bit min** and **Bit max**, its first and last bits inside that word (restarting at 0 with each word), its width in **Bits**, and the value. A field wider than a word shows the range of its words, such as `2–3`, with its bits relative to itself.
 
@@ -106,9 +109,16 @@ Each row shows the **Word** holding the field, counted from 0, **Bit min** and *
 
 The toolbar has two layouts: **From**, the byte order and bit numbering the buffer is written in, and **To**, the layout to convert it to. For instance, a structure written by a little endian compiler that allocates bitfields from the LSB (**From** LE LSB0) and expected by a big endian target that allocates them from the MSB (**To** BE MSB0).
 
-The fields keep the same values in both layouts; only the bytes change. The data section shows the bytes in the From layout, with the same structure in the To layout right under it. Both can be edited: typing bytes in the To data rewrites the From data through the reverse conversion. **Byte by byte** compares them word by word, each word in the reading order of its layout, most significant byte first: `+3 +2 +1 +0` for a little endian word, `+0 +1 +2 +3` for a big endian one, so a word reads as its value (`00 00 03 45` in LE LSB0, `45 03 00 00` in BE MSB0). Each layout has its own line of offsets; the bytes that differ between From and To at the same offset are highlighted, and as many words fit on a line as the view is wide. A legend under it explains the colours: highlighted, the byte differs between From and To at that offset; `--`, the byte is missing in the From buffer and read as 0. **Format** chooses how both are shown, typed and copied: bytes (`FA 00` or `0xFA, 0x00`) or 16, 32 or 64-bit words (`0xFA00`...), each word read in the byte order of its layout. The **Copy** and **C array** buttons next to each one copy it in that format, as text or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
+**Conversion** chooses what the conversion keeps:
 
-**⇄** swaps the two layouts and replaces the buffer by its conversion, so the values stay the same.
+- **Values** (the default): each field keeps its value, only its place in the bytes changes. A field holding 69 in LE LSB0 holds 69 in BE MSB0: this is the case of two systems exchanging the same data, and the To buffer gives the bytes to send.
+- **Mirror**: each bit keeps its number: bit k in the From numbering is bit k in the To numbering. Between LSB0 and MSB0, each word is reversed bit by bit and each field reads backwards: 69 (`0100 0101`) becomes 162 (`1010 0010`). A **DEC To** column then gives the values read in To.
+
+**BIN From** and **BIN To** write the bits of each field from its highest bit number to its lowest, in the numbering of their layout: the usual writing in LSB0, reversed in MSB0, where bit 0 is the most significant bit. In Values mode, 69 is `0100 0101` in BIN From LSB0 and `1010 0010` in BIN To MSB0.
+
+The data section shows the bytes in the From layout, with the same structure in the To layout right under it. Both can be edited: typing bytes in the To data rewrites the From data through the reverse conversion. **Byte by byte** compares them word by word, each word in the reading order of its layout, most significant byte first: `+3 +2 +1 +0` for a little endian word, `+0 +1 +2 +3` for a big endian one, so a word reads as its value (`00 00 03 45` in LE LSB0, `45 03 00 00` in BE MSB0). Each layout has its own line of offsets; the bytes that differ between From and To at the same offset are highlighted, and as many words fit on a line as the view is wide. A legend under it explains the colours: highlighted, the byte differs between From and To at that offset; `--`, the byte is missing in the From buffer and read as 0. **Format** chooses how both are shown, typed and copied: bytes (`FA 00` or `0xFA, 0x00`) or 16, 32 or 64-bit words (`0xFA00`...), each word read in the byte order of its layout. The **Copy** and **C array** buttons next to each one copy it in that format, as text or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
+
+**⇄** swaps the two layouts and replaces the buffer by its conversion: in Values mode the values stay the same.
 
 Changing the **From** byte order or bit numbering keeps the values too: the DEC column holds what was typed, so the structure bytes of the buffer are rewritten in the new layout rather than read again with it. To read existing bytes with another layout, change the layout first, then paste the bytes.
 

@@ -4,6 +4,17 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.31] - 2026-11-18
+
+### Added
+
+- **Conversion** choice in both views: **Values** (default) keeps the value of each field, only its place in the bytes changes (69 in LE LSB0 is 69 in BE MSB0); **Mirror** keeps the number of each bit, so between LSB0 and MSB0 each word is reversed bit by bit and each field reads backwards (69 becomes 162). Typing in the To buffer and the swap follow the chosen mode.
+- Struct Decoder: **BIN From** and **BIN To** columns, the bits of each field from its highest bit number to its lowest in the numbering of each layout (69 is `0100 0101` in LSB0, `1010 0010` in MSB0); in Mirror mode, a **DEC To** column with the values read in To. The exports follow the same columns and name the conversion mode.
+
+### Changed
+
+- Calculator: the default conversion is now Values: only the byte order applies; the previous behaviour (bits reversed between LSB0 and MSB0) is the Mirror mode.
+
 ## [0.0.30] - 2026-11-18
 
 ### Changed

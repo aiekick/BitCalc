@@ -1,4 +1,4 @@
-import { BitOrder, Endianness, formatBits, groupDigits } from "../utils/bits";
+import { BitOrder, Endianness, formatBits } from "../utils/bits";
 import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
@@ -11,6 +11,9 @@ import {
   IAlignment,
   icdAlignment,
   convertStruct,
+  ConversionMode,
+  binaryInNumbering,
+  mirrorStruct,
   encodeStruct,
   enumeratorName,
   fieldValue,
@@ -52,6 +55,9 @@ interface IStructState {
   /// fields of nested structures shown with their whole path
   /// (header.version) or with their own name only (version)
   nameMode: NameMode;
+  /// From -> To conversion: fields keep their values, or bits keep their
+  /// numbers (see ConversionMode)
+  conversion: ConversionMode;
 }
 
 type NameMode = "path" | "name";
@@ -71,6 +77,7 @@ const state: IStructState = {
   rootStruct: "",
   wordBits: 32,
   nameMode: "path",
+  conversion: "values",
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -85,6 +92,7 @@ state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
 state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
+state.conversion = oneOf(state.conversion, ["values", "mirror"], "values");
 const saveState = createStateSaver(api);
 
 const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
@@ -96,10 +104,14 @@ byId("app").innerHTML = `
     <span class="layout-label" title="Layout the data is written in">From</span>
     <div class="segmented" id="endianness" title="Byte order of the data">${ENDIANNESS_BUTTONS}</div>
     <div class="segmented" id="bitOrder" title="Bitfield allocation of the data: from the LSB (LSB0) or the MSB (MSB0) of their storage unit">${BIT_ORDER_BUTTONS}</div>
-    <button id="swapLayouts" title="Swap From and To: the data is replaced by its conversion, the values stay the same">⇄</button>
+    <button id="swapLayouts" title="Swap From and To: the data is replaced by its conversion (in Values mode the values stay the same)">⇄</button>
     <span class="layout-label" title="Layout the data is converted to">To</span>
     <div class="segmented" id="targetEndianness" title="Byte order of the conversion">${ENDIANNESS_BUTTONS}</div>
     <div class="segmented" id="targetBitOrder" title="Bitfield allocation of the conversion">${BIT_ORDER_BUTTONS}</div>
+    <span class="layout-label" title="How From is converted to To">Conversion</span>
+    <div class="segmented" id="conversion" title="Values: each field keeps its value, only its place in the bytes changes (69 stays 69). Mirror: each bit keeps its number, so with LSB0 <-> MSB0 each word is reversed bit by bit and each field reads backwards (69 becomes 162)">
+      <button data-value="values">Values</button><button data-value="mirror">Mirror</button>
+    </div>
     <span class="layout-label" title="The message is a sequence of words of this size; the fields follow each other inside the words and never straddle two of them">Word</span>
     <div class="segmented" id="wordBits" title="Size of the words of the message">
       <button data-value="8">8</button><button data-value="16">16</button><button data-value="32">32</button><button data-value="64">64</button>
@@ -130,15 +142,7 @@ byId("app").innerHTML = `
   <div class="table-note" id="tableNote"></div>
   <div class="table-wrap">
     <table class="fields">
-      <thead><tr>
-        <th title="Word holding the field, counted from 0">Word</th>
-        <th title="First bit of the field inside its word; the count restarts at 0 with each word">Bit min</th>
-        <th title="Last bit of the field inside its word">Bit max</th>
-        <th title="Width in bits">Bits</th>
-        <th>Field</th><th>Type</th>
-        <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated">DEC ✎</th>
-        <th>HEX</th><th>OCT</th><th>BIN</th>
-      </tr></thead>
+      <thead><tr id="fieldsHead"></tr></thead>
       <tbody id="fields"></tbody>
     </table>
   </div>
@@ -222,6 +226,8 @@ interface IModel {
   readonly size: number;
   /// the structure stored in the target layout
   readonly converted: Uint8Array;
+  /// the fields read from the converted bytes in the To layout
+  readonly decodedTo: IDecodedField[];
   readonly alignment: IAlignment;
 }
 
@@ -251,6 +257,9 @@ function computeModel(): IModel {
     + (bytes.length < decoded.size ? `, ${decoded.size - bytes.length} missing (read as 0 in the conversion)` : "")
     + (bytes.length > decoded.size ? `, ${bytes.length - decoded.size} unused` : "");
   summary.classList.toggle("warning", bytes.length < decoded.size);
+  const converted = state.conversion === "mirror"
+    ? mirrorStruct(bytes, decoded.size, state.wordBits, sourceLayout(), targetLayout())
+    : encodeStruct(decoded.fields, decoded.size, targetLayout());
   return {
     name: parsed.name,
     fields: parsed.fields,
@@ -258,7 +267,8 @@ function computeModel(): IModel {
     bytes,
     decoded: decoded.fields,
     size: decoded.size,
-    converted: encodeStruct(decoded.fields, decoded.size, targetLayout()),
+    converted,
+    decodedTo: decodeStruct(parsed.fields, converted, targetLayout(), alignment).fields,
     alignment
   };
 }
@@ -461,49 +471,91 @@ function valueInput(a_field: IDecodedField, a_row: number): HTMLInputElement {
   return input;
 }
 
-/// HEX, OCT and BIN cells of a field.
-function valueCells(a_field: IDecodedField): string[] {
-  const raw = a_field.raw;
-  return raw === undefined
-    ? ["—", "—", "—"]
-    : [
-      formatBits(raw, a_field.bitWidth, 16, true),
-      formatBits(raw, a_field.bitWidth, 8, false),
-      groupDigits(formatBits(raw, a_field.bitWidth, 2, true), 4)
-    ];
+interface IColumn {
+  readonly label: string;
+  readonly title?: string;
+  readonly align: ColumnAlign;
 }
 
-const TABLE_HEADERS = ["Word", "Bit min", "Bit max", "Bits", "Field", "Type", "DEC", "HEX", "OCT", "BIN"];
-const TABLE_ALIGN: ColumnAlign[] = ["right", "right", "right", "right", "left", "left", "right", "right", "right", "right"];
+/// Columns of the field table. DEC To only in Mirror mode, where the To
+/// values differ from the From ones.
+function tableColumns(): IColumn[] {
+  const from = state.bitOrder.toUpperCase();
+  const to = state.targetBitOrder.toUpperCase();
+  const backwards = (a_order: BitOrder): string => (a_order === "msb0" ? ": bit 0 is the most significant bit, so the value reads backwards" : "");
+  const columns: IColumn[] = [
+    { label: "Word", title: "Word holding the field, counted from 0", align: "right" },
+    { label: "Bit min", title: "First bit of the field inside its word; the count restarts at 0 with each word", align: "right" },
+    { label: "Bit max", title: "Last bit of the field inside its word", align: "right" },
+    { label: "Bits", title: "Width in bits", align: "right" },
+    { label: "Field", align: "left" },
+    { label: "Type", align: "left" },
+    { label: "DEC", title: "Value of the field in From. Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated", align: "right" }
+  ];
+  if (state.conversion === "mirror") {
+    columns.push({ label: "DEC To", title: "Value of the field read in To: in Mirror mode the bits keep their numbers, so the value changes with the bit numbering", align: "right" });
+  }
+  columns.push(
+    { label: "HEX", title: "Value of the field in From", align: "right" },
+    { label: "OCT", title: "Value of the field in From", align: "right" },
+    { label: `BIN From ${from}`, title: `Bits of the field in From, from its highest bit number to its lowest${backwards(state.bitOrder)}`, align: "right" },
+    { label: `BIN To ${to}`, title: `Bits of the field in To, from its highest bit number to its lowest${backwards(state.targetBitOrder)}`, align: "right" }
+  );
+  return columns;
+}
+
+/// Cells of a_field after DEC: DEC To in Mirror mode, HEX, OCT, BIN From,
+/// BIN To.
+function valueCells(a_field: IDecodedField, a_to: IDecodedField | undefined): string[] {
+  const raw = a_field.raw;
+  const toRaw = a_to?.raw;
+  const cells: string[] = [];
+  if (state.conversion === "mirror") {
+    cells.push(a_to === undefined || toRaw === undefined ? "—" : displayValue(a_to));
+  }
+  cells.push(
+    raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 16, true),
+    raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 8, false),
+    raw === undefined ? "—" : binaryInNumbering(raw, a_field.bitWidth, state.bitOrder),
+    toRaw === undefined ? "—" : binaryInNumbering(toRaw, a_field.bitWidth, state.targetBitOrder)
+  );
+  return cells;
+}
 
 /// Rows of the field table as text, as copied by the export buttons.
 function tableRows(a_model: IModel): string[][] {
-  return a_model.decoded.map((a_field) => [
+  return a_model.decoded.map((a_field, a_index) => [
     ...placementCells(a_field),
     fieldLabel(a_field),
     a_field.typeName,
     a_field.raw === undefined ? "—" : displayValue(a_field),
-    ...valueCells(a_field)
+    ...valueCells(a_field, a_model.decodedTo[a_index])
   ]);
+}
+
+/// Headers and alignments of the exported table.
+function exportColumns(): [string[], ColumnAlign[]] {
+  const columns = tableColumns();
+  return [columns.map((a_column) => a_column.label), columns.map((a_column) => a_column.align)];
 }
 
 /// Line naming the structure, its layout and its size, above an export.
 function exportTitle(a_model: IModel, a_bold: boolean): string {
   const words = (a_model.size * 8) / state.wordBits;
   const name = a_model.name ?? "Structure";
-  return `${a_bold ? `**${name}**` : name}: ${layoutName(sourceLayout())}, ${words} word${words === 1 ? "" : "s"} of ${state.wordBits} bits (${a_model.size} bytes)`;
+  return `${a_bold ? `**${name}**` : name}: ${layoutName(sourceLayout())} -> ${layoutName(targetLayout())} (${state.conversion === "mirror" ? "mirror: bits keep their numbers" : "values kept"}), ${words} word${words === 1 ? "" : "s"} of ${state.wordBits} bits (${a_model.size} bytes)`;
 }
 
 /// The field table as Markdown, under a line naming the structure and its layout.
 function fieldsMarkdown(a_model: IModel): string {
-  return `${exportTitle(a_model, true)}\n\n${markdownTable(TABLE_HEADERS, tableRows(a_model), TABLE_ALIGN)}\n`;
+  return `${exportTitle(a_model, true)}\n\n${markdownTable(exportColumns()[0], tableRows(a_model), exportColumns()[1])}\n`;
 }
 
 /// The field table as a C++ line comment block, in ASCII only (the dash of
 /// a missing value becomes "-", a field spanning words reads "2-3").
 function fieldsCppComment(a_model: IModel): string {
   const rows = tableRows(a_model).map((a_row) => a_row.map((a_cell) => a_cell.replace(/[\u2013\u2014]/g, "-")));
-  return `${cppLineComment(`${exportTitle(a_model, false)}\n\n${textTable(TABLE_HEADERS, rows, TABLE_ALIGN)}`)}\n`;
+  return `${cppLineComment(`${exportTitle(a_model, false)}\n\n${textTable(exportColumns()[0], rows, exportColumns()[1])}`)}\n`;
 }
 
 /// Name of a field as shown in the table and the exports: its whole path
@@ -521,12 +573,22 @@ function bitNumbering(a_order: BitOrder): string {
   return a_order === "lsb0" ? "bit 0 = least significant bit of the word" : "bit 0 = most significant bit of the word";
 }
 
+const fieldsHead = byId("fieldsHead");
+
 function renderFields(a_model: IModel): void {
-  tableNote.textContent = "The values of the fields are the same in From and To: only their place in the bytes changes. "
-    + (state.bitOrder === state.targetBitOrder
-      ? `Bit min / Bit max: ${state.bitOrder.toUpperCase()}, ${bitNumbering(state.bitOrder)}.`
-      : `Bit min / Bit max hold in both layouts, each with its numbering: ${state.bitOrder.toUpperCase()} (From), ${bitNumbering(state.bitOrder)}; ${state.targetBitOrder.toUpperCase()} (To), ${bitNumbering(state.targetBitOrder)}.`)
-    + " HEX, OCT and BIN write the value most significant digit first.";
+  fieldsHead.replaceChildren(...tableColumns().map((a_column) => {
+    const cell = createElement("th", undefined, a_column.label === "DEC" ? "DEC ✎" : a_column.label);
+    if (a_column.title !== undefined) {
+      cell.title = a_column.title;
+    }
+    return cell;
+  }));
+  tableNote.textContent = (state.conversion === "mirror"
+    ? "Mirror: each bit keeps its number from From to To, so a field whose bit numbering changes reads backwards in To (DEC To). "
+    : "Values: each field keeps its value from From to To, only its place in the bytes changes. ")
+    + `Bit min / Bit max: ${bitNumbering(state.bitOrder)} in From (${state.bitOrder.toUpperCase()})`
+    + (state.targetBitOrder !== state.bitOrder ? `, ${bitNumbering(state.targetBitOrder)} in To (${state.targetBitOrder.toUpperCase()})` : "")
+    + ". BIN From / BIN To write the bits from the highest bit number to the lowest, so the same value reads backwards in MSB0.";
   fieldsBody.replaceChildren();
   for (const [index, field] of a_model.decoded.entries()) {
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
@@ -545,7 +607,7 @@ function renderFields(a_model: IModel): void {
     const valueCell = createElement("td", "value");
     valueCell.append(field.enumDef !== undefined ? enumSelect(field, index) : valueInput(field, index));
     row.append(valueCell);
-    for (const text of valueCells(field)) {
+    for (const text of valueCells(field, a_model.decodedTo[index])) {
       row.append(createElement("td", "value", text));
     }
     fieldsBody.append(row);
@@ -676,7 +738,9 @@ targetBufferInput.addEventListener("input", () => {
   }
   targetBufferInput.classList.remove("invalid");
   targetBufferInput.title = "";
-  const fromBytes = convertStruct(model.fields, typed.bytes, targetLayout(), sourceLayout(), model.alignment);
+  const fromBytes = state.conversion === "mirror"
+    ? mirrorStruct(typed.bytes, model.size, state.wordBits, targetLayout(), sourceLayout())
+    : convertStruct(model.fields, typed.bytes, targetLayout(), sourceLayout(), model.alignment);
   const required = state.offset + model.size;
   const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
   bytes.set(model.allBytes);
@@ -766,6 +830,12 @@ byId("swapLayouts").addEventListener("click", () => {
   showLayouts();
   update();
 });
+
+const showConversion = bindSegmented<ConversionMode>(byId("conversion"), (a_mode) => {
+  state.conversion = a_mode;
+  update();
+});
+showConversion(state.conversion);
 
 const showNameMode = bindSegmented<NameMode>(byId("nameMode"), (a_mode) => {
   state.nameMode = a_mode;

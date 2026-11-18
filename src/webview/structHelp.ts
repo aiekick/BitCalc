@@ -91,6 +91,11 @@ export function buildStructHelp(): HTMLElement {
       "Word / Bit min / Bit max: the word of the field and its bits inside it, from 0 in each word.",
       "#pragma lines and __attribute__ annotations are ignored."
     ])),
+    section("Conversion", list([
+      "Values (default): each field keeps its value from From to To, only its place in the bytes changes (69 stays 69).",
+      "Mirror: each bit keeps its number; between LSB0 and MSB0 each word is reversed bit by bit and each field reads backwards (69 becomes 162), shown in DEC To.",
+      "BIN From / BIN To write the bits from the highest bit number to the lowest in each numbering: 69 is 0100 0101 in LSB0, 1010 0010 in MSB0."
+    ])),
     section("Buffer", list([
       "Hex bytes: 01 02 0A FF, 0x01, 0x02, \\x01\\x02, { 0x1, 0x2 } or 01020AFF.",
       "Offset skips that many bytes before the structure."

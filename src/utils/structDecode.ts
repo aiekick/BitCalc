@@ -1,4 +1,4 @@
-import { BitOrder, Endianness, fromBytes, maskOf, toBytes, toSigned } from "./bits";
+import { BitOrder, Endianness, fromBytes, maskOf, reverseBits, toBytes, toSigned } from "./bits";
 import { IEnumDef, IFieldDef, IScalarType } from "./structDef";
 
 /// Layout rules:
@@ -398,3 +398,46 @@ export function floatToRaw(a_value: number, a_size: number): bigint {
   return view.getBigUint64(0);
 }
 
+
+/// How the From layout is converted to the To layout.
+/// - "values": every field keeps its value, only its place in the bytes
+///   changes (a field holding 69 holds 69 on both sides);
+/// - "mirror": every bit keeps its number: bit k in the From numbering is
+///   bit k in the To numbering, so with LSB0 <-> MSB0 each word is reversed
+///   bit by bit and each field reads backwards (69 = 0100 0101 becomes 162).
+export type ConversionMode = "values" | "mirror";
+
+/// Mirror conversion of a_size bytes made of a_wordBits words: each word is
+/// read in the a_from byte order, reversed bit by bit when the bit numbering
+/// changes, and stored in the a_to byte order. Missing bytes read as 0.
+export function mirrorStruct(a_bytes: Uint8Array, a_size: number, a_wordBits: number, a_from: ILayoutOptions, a_to: ILayoutOptions): Uint8Array {
+  const wordBytes = Math.max(1, a_wordBits / 8);
+  const result = new Uint8Array(a_size);
+  for (let start = 0; start < a_size; start += wordBytes) {
+    const count = Math.min(wordBytes, a_size - start);
+    const word = new Uint8Array(count);
+    word.set(a_bytes.subarray(start, Math.min(start + count, a_bytes.length)));
+    let value = fromBytes(word, a_from.endianness);
+    if (a_from.bitOrder !== a_to.bitOrder) {
+      value = reverseBits(value, count * 8);
+    }
+    result.set(toBytes(value, count, a_to.endianness), start);
+  }
+  return result;
+}
+
+/// The bits of a field written from its highest bit number to its lowest,
+/// in groups of 4 from the right: the usual writing in LSB0 (most
+/// significant bit on the left), reversed in MSB0, where bit 0 is the most
+/// significant bit.
+export function binaryInNumbering(a_raw: bigint, a_width: number, a_bitOrder: BitOrder): string {
+  let digits = (a_raw & ((1n << BigInt(a_width)) - 1n)).toString(2).padStart(a_width, "0");
+  if (a_bitOrder === "msb0") {
+    digits = digits.split("").reverse().join("");
+  }
+  const groups: string[] = [];
+  for (let end = digits.length; end > 0; end -= 4) {
+    groups.unshift(digits.slice(Math.max(0, end - 4), end));
+  }
+  return groups.join(" ");
+}
