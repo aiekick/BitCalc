@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.33] - 2026-11-18
+
+### Added
+
+- Struct Decoder: the Structure editor (with its template list, Format, help) folds too; the parse errors stay visible under it.
+
 ## [0.0.32] - 2026-11-18
 
 ### Added

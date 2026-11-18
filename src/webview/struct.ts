@@ -58,7 +58,7 @@ interface IStructState {
   /// From -> To conversion: fields keep their values, or bits keep their
   /// numbers (see ConversionMode)
   conversion: ConversionMode;
-  /// sections folded by the user: "table", "buffers", "grid"
+  /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
 }
 
@@ -121,8 +121,9 @@ byId("app").innerHTML = `
       <button data-value="8">8</button><button data-value="16">16</button><button data-value="32">32</button><button data-value="64">64</button>
     </div>
   </div>
+  <details class="fold" data-fold="structure" id="structureFold" open>
+  <summary class="section-title">Structure</summary>
   <div class="pane-header">
-    <label class="section-title" for="definition">Structure</label>
     <select id="template" title="Replace the structure with a template (Ctrl+Z undoes it)">
       <option value="" selected>Template…</option>
       ${STRUCT_TEMPLATES.map((a_template, a_index) => `<option value="${a_index}">${a_template.label}</option>`).join("")}
@@ -131,6 +132,7 @@ byId("app").innerHTML = `
     <button id="helpToggle" class="help-toggle" title="Supported types and syntax" aria-expanded="false">?</button>
   </div>
   <textarea id="definition" spellcheck="false" rows="10"></textarea>
+  </details>
   <ul id="messages" class="messages"></ul>
   <div class="summary-line">
     <select id="rootStruct" title="Structure to decode" hidden></select>
@@ -914,7 +916,7 @@ definitionInput.addEventListener("keydown", (a_event) => {
 
 const helpBox = buildStructHelp();
 helpBox.hidden = true;
-messages.before(helpBox);
+byId("structureFold").append(helpBox);
 const helpToggle = byId("helpToggle");
 helpToggle.addEventListener("click", () => {
   helpBox.hidden = !helpBox.hidden;
