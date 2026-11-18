@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.40] - 2026-11-18
+
+### Removed
+
+- The Mirror conversion mode and the Conversion choice, in both views: misleading, since a value does not change with the bit numbering. The conversion always keeps the values (in the calculator, only the byte order applies). DEC To and the BIN To column of Mirror mode go with it; the BIN Numbered view stays.
+
 ## [0.0.39] - 2026-11-18
 
 ### Changed

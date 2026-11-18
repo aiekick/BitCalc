@@ -36,10 +36,6 @@ interface ICalculatorState {
   targetBitOrder: BitOrder;
   targetEndianness: Endianness;
   expression: string;
-  /// From -> To conversion: the value is kept (only the byte order applies),
-  /// or each bit keeps its number (the word is mirrored when the bit
-  /// numbering changes)
-  conversion: "values" | "mirror";
 }
 
 const WORD_SIZES = [8, 16, 32, 64, 128];
@@ -55,7 +51,6 @@ const state: ICalculatorState = {
   targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
   targetEndianness: config.endianness === "little" ? "big" : "little",
   expression: "",
-  conversion: "values",
   ...readStartState<ICalculatorState>(api)
 };
 if (!WORD_SIZES.includes(state.width)) {
@@ -67,7 +62,6 @@ state.endianness = oneOf(state.endianness, ["little", "big"], "little");
 state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
 state.targetEndianness = oneOf(state.targetEndianness, ["little", "big"], "big");
 state.expression = typeof state.expression === "string" ? state.expression : "";
-state.conversion = oneOf(state.conversion, ["values", "mirror"], "values");
 const saveState = createStateSaver(api);
 let value = normalize(BigInt(/^-?[0-9]+$/.test(state.value) ? state.value : "0"), state.width, state.signed);
 
@@ -90,10 +84,6 @@ byId("app").innerHTML = `
     </div>
     <div class="segmented" id="targetEndianness" title="Byte order of the conversion">
       <button data-value="little">LE</button><button data-value="big">BE</button>
-    </div>
-    <span class="layout-label" title="How From is converted to To">Conversion</span>
-    <div class="segmented" id="conversion" title="Values: the value is kept, only the byte order applies. Mirror: each bit keeps its number, so LSB0 <-> MSB0 reverses the word bit by bit">
-      <button data-value="values">Values</button><button data-value="mirror">Mirror</button>
     </div>
   </div>
   <div class="expression">
@@ -146,8 +136,9 @@ function convertedValue(): bigint {
     value,
     state.width,
     { endianness: state.endianness, bitOrder: state.bitOrder },
-    // In Values mode the bit numbering does not move the bits
-    { endianness: state.targetEndianness, bitOrder: state.conversion === "mirror" ? state.targetBitOrder : state.bitOrder }
+    // The value is kept: the bit numbering does not move the bits, only the
+    // byte order applies
+    { endianness: state.targetEndianness, bitOrder: state.bitOrder }
   );
   return normalize(converted, state.width, state.signed);
 }
@@ -214,8 +205,7 @@ function renderBits(): void {
         cell.classList.add(position % 8 === 0 ? "byte-end" : "nibble-end");
       }
       const button = createElement("button", isSet ? "bit on" : "bit", isSet ? "1" : "0");
-      button.title = `Bit ${bitLabel(position)} (${state.bitOrder.toUpperCase()}), weight 2^${position}`
-        + (state.conversion === "mirror" && state.targetBitOrder !== state.bitOrder ? `; after conversion, at weight 2^${state.width - 1 - position}` : "");
+      button.title = `Bit ${bitLabel(position)} (${state.bitOrder.toUpperCase()}), weight 2^${position}`;
       button.addEventListener("click", () => setValue(value ^ (1n << BigInt(position))));
       cell.append(button, createElement("span", "bit-index", String(bitLabel(position))));
       row.append(cell);
@@ -359,17 +349,11 @@ const showTargetEndianness = bindSegmented<Endianness>(byId("targetEndianness"),
   render();
 });
 
-const showConversion = bindSegmented<"values" | "mirror">(byId("conversion"), (a_mode) => {
-  state.conversion = a_mode;
-  render();
-});
-
 function showLayouts(): void {
   showBitOrder(state.bitOrder);
   showEndianness(state.endianness);
   showTargetBitOrder(state.targetBitOrder);
   showTargetEndianness(state.targetEndianness);
-  showConversion(state.conversion);
 }
 
 /// Swap From and To; the value becomes its conversion, which converts back

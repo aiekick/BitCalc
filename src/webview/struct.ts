@@ -11,10 +11,8 @@ import {
   IAlignment,
   icdAlignment,
   convertStruct,
-  ConversionMode,
   binaryDigits,
   bitNumbers,
-  mirrorStruct,
   encodeStruct,
   enumeratorName,
   fieldValue,
@@ -56,9 +54,6 @@ interface IStructState {
   /// fields of nested structures shown with their whole path
   /// (header.version) or with their own name only (version)
   nameMode: NameMode;
-  /// From -> To conversion: fields keep their values, or bits keep their
-  /// numbers (see ConversionMode)
-  conversion: ConversionMode;
   /// BIN column(s): the value, most significant bit on the left ("value"),
   /// or From and To with the number of each bit in their convention
   /// ("numbered")
@@ -85,7 +80,6 @@ const state: IStructState = {
   rootStruct: "",
   wordBits: 32,
   nameMode: "path",
-  conversion: "values",
   folded: [],
   binView: "value",
   bufferFormat: "bytes",
@@ -102,7 +96,6 @@ state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
 state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
-state.conversion = oneOf(state.conversion, ["values", "mirror"], "values");
 state.binView = oneOf(state.binView, ["value", "numbered"], "value");
 state.folded = Array.isArray(state.folded) ? state.folded.filter((a_name) => typeof a_name === "string") : [];
 const saveState = createStateSaver(api);
@@ -116,14 +109,10 @@ byId("app").innerHTML = `
     <span class="layout-label" title="Layout the data is written in">From</span>
     <div class="segmented" id="endianness" title="Byte order of the data">${ENDIANNESS_BUTTONS}</div>
     <div class="segmented" id="bitOrder" title="Bitfield allocation of the data: from the LSB (LSB0) or the MSB (MSB0) of their storage unit">${BIT_ORDER_BUTTONS}</div>
-    <button id="swapLayouts" title="Swap From and To: the data is replaced by its conversion (in Values mode the values stay the same)">⇄</button>
+    <button id="swapLayouts" title="Swap From and To: the data is replaced by its conversion, the values stay the same">⇄</button>
     <span class="layout-label" title="Layout the data is converted to">To</span>
     <div class="segmented" id="targetEndianness" title="Byte order of the conversion">${ENDIANNESS_BUTTONS}</div>
     <div class="segmented" id="targetBitOrder" title="Bitfield allocation of the conversion">${BIT_ORDER_BUTTONS}</div>
-    <span class="layout-label" title="How From is converted to To">Conversion</span>
-    <div class="segmented" id="conversion" title="Values: each field keeps its value, only its place in the bytes changes (69 stays 69). Mirror: each bit keeps its number, so with LSB0 <-> MSB0 each word is reversed bit by bit and each field reads backwards (69 becomes 162)">
-      <button data-value="values">Values</button><button data-value="mirror">Mirror</button>
-    </div>
     <span class="layout-label" title="The message is a sequence of words of this size; the fields follow each other inside the words and never straddle two of them">Word</span>
     <div class="segmented" id="wordBits" title="Size of the words of the message">
       <button data-value="8">8</button><button data-value="16">16</button><button data-value="32">32</button><button data-value="64">64</button>
@@ -282,9 +271,7 @@ function computeModel(): IModel {
     + (bytes.length < decoded.size ? `, ${decoded.size - bytes.length} missing (read as 0 in the conversion)` : "")
     + (bytes.length > decoded.size ? `, ${bytes.length - decoded.size} unused` : "");
   summary.classList.toggle("warning", bytes.length < decoded.size);
-  const converted = state.conversion === "mirror"
-    ? mirrorStruct(bytes, decoded.size, state.wordBits, sourceLayout(), targetLayout())
-    : encodeStruct(decoded.fields, decoded.size, targetLayout());
+  const converted = encodeStruct(decoded.fields, decoded.size, targetLayout());
   return {
     name: parsed.name,
     fields: parsed.fields,
@@ -502,8 +489,7 @@ interface IColumn {
   readonly align: ColumnAlign;
 }
 
-/// Columns of the field table. DEC To only in Mirror mode, where the To
-/// values differ from the From ones.
+/// Columns of the field table.
 function tableColumns(): IColumn[] {
   const from = state.bitOrder.toUpperCase();
   const to = state.targetBitOrder.toUpperCase();
@@ -516,9 +502,6 @@ function tableColumns(): IColumn[] {
     { label: "Type", align: "left" },
     { label: "DEC", title: "Value of the field in From. Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated", align: "right" }
   ];
-  if (state.conversion === "mirror") {
-    columns.push({ label: "DEC To", title: "Value of the field read in To: in Mirror mode the bits keep their numbers, so the value changes with the bit numbering", align: "right" });
-  }
   columns.push(
     { label: "HEX", title: "Value of the field in From", align: "right" },
     { label: "OCT", title: "Value of the field in From", align: "right" }
@@ -529,10 +512,7 @@ function tableColumns(): IColumn[] {
       { label: `BIN To ${to}`, title: `Bits of the value in To, most significant bit on the left, numbered in ${to} (hover a bit): ${numberingNote(state.targetBitOrder)}`, align: "right" }
     );
   } else {
-    columns.push({ label: "BIN", title: "Bits of the value in From, most significant bit on the left", align: "right" });
-    if (state.conversion === "mirror") {
-      columns.push({ label: "BIN To", title: "Bits of the value read in To, most significant bit on the left", align: "right" });
-    }
+    columns.push({ label: "BIN", title: "Bits of the value, most significant bit on the left, the same in From and To", align: "right" });
   }
   return columns;
 }
@@ -563,15 +543,12 @@ function binCell(a_raw: bigint | undefined, a_width: number, a_first: number, a_
   return { text: `${digits} (${range})`, numbered: { digits, numbers, order: a_order } };
 }
 
-/// Cells of a_field after DEC: DEC To in Mirror mode, HEX, OCT, then the
-/// BIN column(s) of the chosen view.
+/// Cells of a_field after DEC: HEX, OCT, then the BIN column(s) of the
+/// chosen view.
 function valueCells(a_field: IDecodedField, a_to: IDecodedField | undefined): IValueCell[] {
   const raw = a_field.raw;
   const toRaw = a_to?.raw;
   const cells: IValueCell[] = [];
-  if (state.conversion === "mirror") {
-    cells.push({ text: a_to === undefined || toRaw === undefined ? "—" : displayValue(a_to) });
-  }
   cells.push(
     { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 16, true) },
     { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 8, false) }
@@ -586,9 +563,6 @@ function valueCells(a_field: IDecodedField, a_to: IDecodedField | undefined): IV
     );
   } else {
     cells.push(binCell(raw, a_field.bitWidth, first, last, undefined));
-    if (state.conversion === "mirror") {
-      cells.push(binCell(toRaw, a_field.bitWidth, first, last, undefined));
-    }
   }
   return cells;
 }
@@ -640,7 +614,7 @@ function exportColumns(): [string[], ColumnAlign[]] {
 function exportTitle(a_model: IModel, a_bold: boolean): string {
   const words = (a_model.size * 8) / state.wordBits;
   const name = a_model.name ?? "Structure";
-  return `${a_bold ? `**${name}**` : name}: ${layoutName(sourceLayout())} -> ${layoutName(targetLayout())} (${state.conversion === "mirror" ? "mirror: bits keep their numbers" : "values kept"}), ${words} word${words === 1 ? "" : "s"} of ${state.wordBits} bits (${a_model.size} bytes)`;
+  return `${a_bold ? `**${name}**` : name}: ${layoutName(sourceLayout())} -> ${layoutName(targetLayout())}, ${words} word${words === 1 ? "" : "s"} of ${state.wordBits} bits (${a_model.size} bytes)`;
 }
 
 /// The field table as Markdown, under a line naming the structure and its layout.
@@ -680,9 +654,7 @@ function renderFields(a_model: IModel): void {
     }
     return cell;
   }));
-  tableNote.textContent = (state.conversion === "mirror"
-    ? "Mirror: each bit keeps its number from From to To, so a field whose bit numbering changes reads backwards in To (DEC To, BIN To). "
-    : "Values: each field keeps its value from From to To, only its place in the bytes changes. ")
+  tableNote.textContent = "Each field keeps its value from From to To, only its place in the bytes changes. "
     + `Bit min / Bit max: ${bitNumbering(state.bitOrder)} in From (${state.bitOrder.toUpperCase()})`
     + (state.targetBitOrder !== state.bitOrder ? `, ${bitNumbering(state.targetBitOrder)} in To (${state.targetBitOrder.toUpperCase()})` : "")
     + ". BIN writes the value most significant bit first"
@@ -854,9 +826,7 @@ targetBufferInput.addEventListener("input", () => {
   }
   targetBufferInput.classList.remove("invalid");
   targetBufferInput.title = "";
-  const fromBytes = state.conversion === "mirror"
-    ? mirrorStruct(typed.bytes, model.size, state.wordBits, targetLayout(), sourceLayout())
-    : convertStruct(model.fields, typed.bytes, targetLayout(), sourceLayout(), model.alignment);
+  const fromBytes = convertStruct(model.fields, typed.bytes, targetLayout(), sourceLayout(), model.alignment);
   const required = state.offset + model.size;
   const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
   bytes.set(model.allBytes);
@@ -946,12 +916,6 @@ byId("swapLayouts").addEventListener("click", () => {
   showLayouts();
   update();
 });
-
-const showConversion = bindSegmented<ConversionMode>(byId("conversion"), (a_mode) => {
-  state.conversion = a_mode;
-  update();
-});
-showConversion(state.conversion);
 
 const showBinView = bindSegmented<BinView>(byId("binView"), (a_view) => {
   state.binView = a_view;
