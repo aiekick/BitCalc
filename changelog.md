@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.34] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: when the From buffer is shorter than the structure, the From and To titles say so in the warning colour (bytes missing, read as 0), since the To buffer covers the whole structure and shows more words than From.
+
 ## [0.0.33] - 2026-11-18
 
 ### Added

@@ -179,3 +179,4 @@ textarea.invalid { border-color: var(--vscode-inputValidation-errorBorder); }
 details.fold { margin: 6px 0; }
 details.fold > summary { display: list-item; cursor: pointer; font-weight: bold; margin: 4px 0; list-style-position: inside; }
 details.fold > summary:hover { opacity: 1; }
+.section-title.warning { color: var(--vscode-editorWarning-foreground); opacity: 1; }

@@ -643,7 +643,16 @@ function renderConversion(a_model: IModel): void {
   bufferLabel.textContent = `From ${layoutName(sourceLayout())}`
     + (hidden > 0 ? ` (${hidden} byte${hidden === 1 ? "" : "s"} after the structure not shown)` : "");
   bufferLabel.title = hidden > 0 ? "The buffer holds more bytes than the structure; editing the From buffer drops them" : "";
-  targetBufferLabel.textContent = `To ${layoutName(targetLayout())}`;
+  // A From buffer shorter than the structure: the To buffer still covers the
+  // whole structure, the missing bytes read as 0; say so on both buffers
+  const missing = Math.max(0, state.offset + a_model.size - a_model.allBytes.length);
+  if (missing > 0) {
+    bufferLabel.textContent += ` (${missing} byte${missing === 1 ? "" : "s"} missing for the structure, read as 0)`;
+  }
+  bufferLabel.classList.toggle("warning", missing > 0);
+  targetBufferLabel.textContent = `To ${layoutName(targetLayout())}`
+    + (missing > 0 ? ` (the whole structure: the ${missing} missing byte${missing === 1 ? "" : "s"} of From counted as 0)` : "");
+  targetBufferLabel.classList.toggle("warning", missing > 0);
   if (document.activeElement !== bufferInput) {
     bufferInput.value = formatBuffer(a_model.allBytes.subarray(0, shownLength), state.bufferFormat, state.endianness);
     bufferInput.classList.remove("invalid");
