@@ -104,3 +104,36 @@ export function fromBytes(a_bytes: ArrayLike<number>, a_endianness: Endianness):
 export function swapBytes(a_value: bigint, a_width: number): bigint {
   return fromBytes(toBytes(a_value, a_width / 8, "little"), "big");
 }
+
+/// Reverse the order of the a_width bits of a_value (bit i becomes bit
+/// a_width - 1 - i).
+export function reverseBits(a_value: bigint, a_width: number): bigint {
+  let rest = toUnsigned(a_value, a_width);
+  let reversed = 0n;
+  for (let bitIndex = 0; bitIndex < a_width; bitIndex++) {
+    reversed = (reversed << 1n) | (rest & 1n);
+    rest >>= 1n;
+  }
+  return reversed;
+}
+
+export interface IWordLayout {
+  readonly endianness: Endianness;
+  readonly bitOrder: BitOrder;
+}
+
+/// Convert a word between layouts, each bit keeping its number: bit i in the
+/// a_from numbering is bit i in the a_to numbering, and the bytes are stored
+/// in the a_to byte order. The result is the unsigned value a reader using
+/// a_from finds in the memory written with a_to; its bytes in a_from order
+/// are the memory of the converted word.
+export function convertWord(a_value: bigint, a_width: number, a_from: IWordLayout, a_to: IWordLayout): bigint {
+  let value = toUnsigned(a_value, a_width);
+  if (a_from.bitOrder !== a_to.bitOrder) {
+    value = reverseBits(value, a_width);
+  }
+  if (a_from.endianness !== a_to.endianness) {
+    value = swapBytes(value, a_width);
+  }
+  return value;
+}

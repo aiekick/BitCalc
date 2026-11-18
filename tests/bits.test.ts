@@ -1,11 +1,13 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  convertWord,
   formatBits,
   fromBytes,
   groupDigits,
   normalize,
   parseInRadix,
+  reverseBits,
   rotate,
   swapBytes,
   toBytes,
@@ -69,5 +71,32 @@ describe("bit and byte operations", () => {
     assert.equal(fromBytes([0x78, 0x56, 0x34, 0x12], "little"), 0x12345678n);
     assert.equal(fromBytes([0x12, 0x34], "big"), 0x1234n);
     assert.equal(swapBytes(0x12345678n, 32), 0x78563412n);
+  });
+});
+
+describe("convertWord", () => {
+  const LE_LSB0 = { endianness: "little", bitOrder: "lsb0" } as const;
+  const BE_LSB0 = { endianness: "big", bitOrder: "lsb0" } as const;
+  const LE_MSB0 = { endianness: "little", bitOrder: "msb0" } as const;
+  const BE_MSB0 = { endianness: "big", bitOrder: "msb0" } as const;
+
+  test("byte order only swaps the bytes", () => {
+    assert.equal(convertWord(0x12345678n, 32, LE_LSB0, BE_LSB0), 0x78563412n);
+    // memory of the conversion read in the From order = the value stored big endian
+    assert.deepEqual(toBytes(convertWord(0x12345678n, 32, LE_LSB0, BE_LSB0), 4, "little"), [0x12, 0x34, 0x56, 0x78]);
+  });
+
+  test("bit numbering only reverses the bits", () => {
+    assert.equal(convertWord(0b0000_0001n, 8, LE_LSB0, LE_MSB0), 0b1000_0000n);
+    assert.equal(reverseBits(0x0Fn, 8), 0xF0n);
+    assert.equal(reverseBits(0x8001n, 16), 0x8001n);
+  });
+
+  test("both, and back", () => {
+    assert.equal(convertWord(0x0001n, 16, LE_LSB0, BE_MSB0), 0x0080n);
+    for (const value of [0n, 1n, 0x1234n, 0xFFFEn]) {
+      assert.equal(convertWord(convertWord(value, 16, LE_LSB0, BE_MSB0), 16, BE_MSB0, LE_LSB0), value);
+    }
+    assert.equal(convertWord(0x1234n, 16, BE_MSB0, BE_MSB0), 0x1234n);
   });
 });

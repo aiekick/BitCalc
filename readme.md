@@ -19,8 +19,17 @@ Works like the programmer mode of the Windows calculator.
 - **Signed**: the decimal value and the operations use two's complement. Unchecked, the value is unsigned.
 - **HEX, DEC, OCT, BIN**: type in any of the four fields, the others follow. Spaces, `_` and `'` are digit separators and the `0x`, `0o`, `0b` prefixes are accepted. A field turns red when the text is not a number, and orange when the value had to be truncated to the word size. **Copy** copies the value without separators, with its C prefix (`0x`, `0`, `0b`).
 - **Bits**: click a bit to toggle it. The most significant bit is at the top left. The number under each bit is its index: counted from the least significant bit in **LSB0**, from the most significant bit in **MSB0**.
-- **Memory**: the bytes of the value in memory order, for **LE** (little endian) or **BE** (big endian).
 - **Operations**: `NOT`, `NEG` (two's complement negation), `<< 1`, `>> 1` (arithmetic shift when signed), `ROL` and `ROR` (rotation by one bit within the word), `SWAP` (reverse the byte order), `CLR`.
+
+### Converting between layouts
+
+The **From** controls give the layout of the value: bit numbering (**LSB0** or **MSB0**) and byte order (**LE** or **BE**). The **To** controls give the layout to convert it to. Each bit keeps its number: bit 3 in the From numbering is bit 3 in the To numbering, so going from LSB0 to MSB0 reverses the bits of the word, and going from LE to BE reverses its bytes.
+
+- **Converted**: the converted value, as a reader using the From layout finds it in memory, in hex, decimal, octal and binary, with copy buttons.
+- **Memory**: the bytes of the value (From) and of its conversion (To) in memory order, the bytes that differ highlighted.
+- **⇄** swaps From and To and replaces the value by its conversion, so pressing it twice gives the value back.
+
+For instance, `0x12345678` in LE LSB0 converted to BE MSB0 gives `0x482C6A1E`: bits reversed (`0x1E6A2C48`), then bytes reversed.
 
 ### Expressions
 

@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.5] - 2026-11-18
+
+### Added
+
+- Calculator: From and To layouts (LE/BE, LSB0/MSB0) like the Struct Decoder. The value converted to the To layout is shown in hex, decimal, octal and binary with copy buttons, and the memory of both is compared byte by byte. Each bit keeps its number: LSB0 to MSB0 reverses the bits of the word, LE to BE reverses its bytes. ⇄ swaps the layouts and replaces the value by its conversion.
+
 ## [0.0.4] - 2026-11-18
 
 ### Added

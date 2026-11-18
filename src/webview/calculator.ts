@@ -2,6 +2,7 @@ import {
   BitOrder,
   Endianness,
   Radix,
+  convertWord,
   groupDigits,
   normalize,
   parseInRadix,
@@ -27,8 +28,12 @@ interface ICalculatorState {
   value: string;
   width: number;
   signed: boolean;
+  /// layout of the value ("From")
   bitOrder: BitOrder;
   endianness: Endianness;
+  /// layout the value is converted to ("To")
+  targetBitOrder: BitOrder;
+  targetEndianness: Endianness;
   expression: string;
 }
 
@@ -42,6 +47,8 @@ const state: ICalculatorState = {
   signed: config.signed,
   bitOrder: config.bitOrder,
   endianness: config.endianness,
+  targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
+  targetEndianness: config.endianness === "little" ? "big" : "little",
   expression: "",
   ...readSavedState<ICalculatorState>(),
   ...api.getState()
@@ -52,6 +59,8 @@ if (!WORD_SIZES.includes(state.width)) {
 state.signed = state.signed !== false;
 state.bitOrder = oneOf(state.bitOrder, ["lsb0", "msb0"], "lsb0");
 state.endianness = oneOf(state.endianness, ["little", "big"], "little");
+state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
+state.targetEndianness = oneOf(state.targetEndianness, ["little", "big"], "big");
 state.expression = typeof state.expression === "string" ? state.expression : "";
 const saveState = createStateSaver(api);
 let value = normalize(BigInt(/^-?[0-9]+$/.test(state.value) ? state.value : "0"), state.width, state.signed);
@@ -60,10 +69,19 @@ byId("app").innerHTML = `
   <div class="toolbar">
     <label>Word <select id="width">${WORD_SIZES.map((a_size) => `<option value="${a_size}">${a_size} bits</option>`).join("")}</select></label>
     <label class="check"><input type="checkbox" id="signed"> Signed</label>
-    <div class="segmented" id="bitOrder" title="Bit numbering">
+    <span class="layout-label" title="Layout of the value">From</span>
+    <div class="segmented" id="bitOrder" title="Bit numbering of the value">
       <button data-value="lsb0">LSB0</button><button data-value="msb0">MSB0</button>
     </div>
-    <div class="segmented" id="endianness" title="Byte order in memory">
+    <div class="segmented" id="endianness" title="Byte order of the value in memory">
+      <button data-value="little">LE</button><button data-value="big">BE</button>
+    </div>
+    <button id="swapLayouts" title="Swap From and To: the value is replaced by its conversion">⇄</button>
+    <span class="layout-label" title="Layout the value is converted to; each bit keeps its number">To</span>
+    <div class="segmented" id="targetBitOrder" title="Bit numbering of the conversion">
+      <button data-value="lsb0">LSB0</button><button data-value="msb0">MSB0</button>
+    </div>
+    <div class="segmented" id="targetEndianness" title="Byte order of the conversion">
       <button data-value="little">LE</button><button data-value="big">BE</button>
     </div>
   </div>
@@ -84,8 +102,10 @@ byId("app").innerHTML = `
     <button data-op="clear" title="Set to 0">CLR</button>
   </div>
   <div class="bits" id="bits"></div>
-  <div class="section-title">Memory, <span id="bytesOrder"></span></div>
-  <div class="bytes" id="bytes"></div>
+  <div class="section-title" id="convertedTitle"></div>
+  <div class="radix-grid" id="convertedGrid"></div>
+  <div class="section-title" id="bytesTitle"></div>
+  <div class="table-wrap"><table class="byte-grid" id="bytes"></table></div>
 `;
 
 const widthSelect = byId<HTMLSelectElement>("width");
@@ -94,7 +114,8 @@ const expressionInput = byId<HTMLInputElement>("expression");
 const expressionError = byId("expressionError");
 const bitsContainer = byId("bits");
 const bytesContainer = byId("bytes");
-const bytesOrder = byId("bytesOrder");
+const bytesTitle = byId("bytesTitle");
+const convertedTitle = byId("convertedTitle");
 
 interface IRadixRow {
   readonly radix: Radix;
@@ -108,38 +129,59 @@ const RADIX_LABELS: [Radix, string][] = [
   [2, "BIN"]
 ];
 
-const radixRows: IRadixRow[] = RADIX_LABELS.map(([radix, label]) => {
-  const grid = byId("radixGrid");
-  const input = createElement("input", "radix-input");
-  input.id = `radix${radix}`;
-  input.spellcheck = false;
-  const labelElement = createElement("label", "radix-label", label);
-  labelElement.htmlFor = input.id;
-  const copyButton = createElement("button", "copy", "Copy");
-  copyButton.title = "Copy without separators, with the C prefix";
-  copyButton.addEventListener("click", () => api.postMessage({ type: "copy", text: copyText(radix) }));
-  grid.append(labelElement, input, copyButton);
-  return { radix, input };
-});
-
-function digitsFor(a_radix: Radix): string {
-  if (a_radix === 10) {
-    return value.toString();
-  }
-  return toUnsigned(value, state.width).toString(a_radix).toUpperCase();
+/// The value in the To layout, read back with the From layout.
+function convertedValue(): bigint {
+  const converted = convertWord(
+    value,
+    state.width,
+    { endianness: state.endianness, bitOrder: state.bitOrder },
+    { endianness: state.targetEndianness, bitOrder: state.targetBitOrder }
+  );
+  return normalize(converted, state.width, state.signed);
 }
 
-function copyText(a_radix: Radix): string {
+function createRadixRows(a_gridId: string, a_idPrefix: string, a_readOnly: boolean, a_value: () => bigint): IRadixRow[] {
+  const grid = byId(a_gridId);
+  return RADIX_LABELS.map(([radix, label]) => {
+    const input = createElement("input", "radix-input");
+    input.id = `${a_idPrefix}${radix}`;
+    input.spellcheck = false;
+    input.readOnly = a_readOnly;
+    const labelElement = createElement("label", "radix-label", label);
+    labelElement.htmlFor = input.id;
+    const copyButton = createElement("button", "copy", "Copy");
+    copyButton.title = "Copy without separators, with the C prefix";
+    copyButton.addEventListener("click", () => api.postMessage({ type: "copy", text: copyText(a_value(), radix) }));
+    grid.append(labelElement, input, copyButton);
+    return { radix, input };
+  });
+}
+
+const radixRows = createRadixRows("radixGrid", "radix", false, () => value);
+const convertedRows = createRadixRows("convertedGrid", "converted", true, convertedValue);
+
+function digitsFor(a_value: bigint, a_radix: Radix): string {
+  if (a_radix === 10) {
+    return a_value.toString();
+  }
+  return toUnsigned(a_value, state.width).toString(a_radix).toUpperCase();
+}
+
+function copyText(a_value: bigint, a_radix: Radix): string {
   const prefix: Record<Radix, string> = { 16: "0x", 10: "", 8: "0", 2: "0b" };
-  const digits = digitsFor(a_radix);
+  const digits = digitsFor(a_value, a_radix);
   return a_radix === 8 && digits === "0" ? "0" : prefix[a_radix] + digits;
 }
 
-function displayText(a_radix: Radix): string {
+function displayText(a_value: bigint, a_radix: Radix): string {
   if (a_radix === 10) {
-    return digitsFor(10);
+    return digitsFor(a_value, 10);
   }
-  return groupDigits(digitsFor(a_radix), a_radix === 8 ? 3 : 4);
+  return groupDigits(digitsFor(a_value, a_radix), a_radix === 8 ? 3 : 4);
+}
+
+function layoutName(a_endianness: Endianness, a_bitOrder: BitOrder): string {
+  return `${a_endianness === "little" ? "LE" : "BE"} ${a_bitOrder.toUpperCase()}`;
 }
 
 function bitLabel(a_position: number): number {
@@ -160,7 +202,8 @@ function renderBits(): void {
         cell.classList.add(position % 8 === 0 ? "byte-end" : "nibble-end");
       }
       const button = createElement("button", isSet ? "bit on" : "bit", isSet ? "1" : "0");
-      button.title = `Bit ${bitLabel(position)} (${state.bitOrder.toUpperCase()}), weight 2^${position}`;
+      button.title = `Bit ${bitLabel(position)} (${state.bitOrder.toUpperCase()}), weight 2^${position}`
+        + (state.targetBitOrder !== state.bitOrder ? `; after conversion, at weight 2^${state.width - 1 - position}` : "");
       button.addEventListener("click", () => setValue(value ^ (1n << BigInt(position))));
       cell.append(button, createElement("span", "bit-index", String(bitLabel(position))));
       row.append(cell);
@@ -169,17 +212,42 @@ function renderBits(): void {
   }
 }
 
+function hex2(a_byte: number): string {
+  return a_byte.toString(16).toUpperCase().padStart(2, "0");
+}
+
+/// Memory of the value (From) and of its conversion (To), byte by byte.
 function renderBytes(): void {
+  const from = layoutName(state.endianness, state.bitOrder);
+  const to = layoutName(state.targetEndianness, state.targetBitOrder);
+  bytesTitle.textContent = `Memory: ${from} → ${to}`;
+  const byteCount = state.width / 8;
+  const fromBytes = toBytes(value, byteCount, state.endianness);
+  const toBytesOfConversion = toBytes(convertedValue(), byteCount, state.endianness);
   bytesContainer.replaceChildren();
-  bytesOrder.textContent = state.endianness === "little" ? "little endian" : "big endian";
-  toBytes(value, state.width / 8, state.endianness).forEach((a_byte, a_index) => {
-    const cell = createElement("div", "byte-cell");
-    cell.append(
-      createElement("span", "byte-offset", `+${a_index}`),
-      createElement("span", "byte-value", a_byte.toString(16).toUpperCase().padStart(2, "0"))
-    );
-    bytesContainer.append(cell);
-  });
+  for (let start = 0; start < byteCount; start += 16) {
+    const end = Math.min(start + 16, byteCount);
+    const header = createElement("tr", "byte-grid-offsets");
+    const fromRow = createElement("tr");
+    const toRow = createElement("tr");
+    header.append(createElement("th"));
+    fromRow.append(createElement("th", undefined, "From"));
+    toRow.append(createElement("th", undefined, "To"));
+    for (let index = start; index < end; index++) {
+      header.append(createElement("th", undefined, `+${index}`));
+      fromRow.append(createElement("td", undefined, hex2(fromBytes[index])));
+      toRow.append(createElement("td", toBytesOfConversion[index] !== fromBytes[index] ? "changed" : undefined, hex2(toBytesOfConversion[index])));
+    }
+    bytesContainer.append(header, fromRow, toRow);
+  }
+}
+
+function renderConverted(): void {
+  convertedTitle.textContent = `Converted to ${layoutName(state.targetEndianness, state.targetBitOrder)}, read as ${layoutName(state.endianness, state.bitOrder)}`;
+  const converted = convertedValue();
+  for (const row of convertedRows) {
+    row.input.value = displayText(converted, row.radix);
+  }
 }
 
 function save(): void {
@@ -190,12 +258,13 @@ function save(): void {
 function render(a_skip?: HTMLInputElement): void {
   for (const row of radixRows) {
     if (row.input !== a_skip) {
-      row.input.value = displayText(row.radix);
+      row.input.value = displayText(value, row.radix);
       row.input.classList.remove("invalid", "truncated");
       row.input.title = "";
     }
   }
   renderBits();
+  renderConverted();
   renderBytes();
   save();
 }
@@ -269,6 +338,32 @@ const showEndianness = bindSegmented<Endianness>(byId("endianness"), (a_endianne
   render();
 });
 
+const showTargetBitOrder = bindSegmented<BitOrder>(byId("targetBitOrder"), (a_order) => {
+  state.targetBitOrder = a_order;
+  render();
+});
+const showTargetEndianness = bindSegmented<Endianness>(byId("targetEndianness"), (a_endianness) => {
+  state.targetEndianness = a_endianness;
+  render();
+});
+
+function showLayouts(): void {
+  showBitOrder(state.bitOrder);
+  showEndianness(state.endianness);
+  showTargetBitOrder(state.targetBitOrder);
+  showTargetEndianness(state.targetEndianness);
+}
+
+/// Swap From and To; the value becomes its conversion, which converts back
+/// to the previous value.
+byId("swapLayouts").addEventListener("click", () => {
+  const converted = convertedValue();
+  [state.bitOrder, state.targetBitOrder] = [state.targetBitOrder, state.bitOrder];
+  [state.endianness, state.targetEndianness] = [state.targetEndianness, state.endianness];
+  showLayouts();
+  setValue(converted);
+});
+
 const OPERATIONS: Record<string, () => bigint> = {
   not: () => ~value,
   neg: () => -value,
@@ -292,8 +387,7 @@ onHostMessage((a_message) => {
 
 widthSelect.value = String(state.width);
 signedCheck.checked = state.signed;
-showBitOrder(state.bitOrder);
-showEndianness(state.endianness);
+showLayouts();
 expressionInput.value = state.expression;
 render();
 api.postMessage({ type: "ready" });
