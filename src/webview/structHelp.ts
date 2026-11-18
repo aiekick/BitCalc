@@ -1,16 +1,21 @@
+import { SCALAR_TYPES } from "../utils/structDef";
 import { createElement } from "./common";
 
 /// Help box of the Struct Decoder.
 
-/// Types shown in the help: a type is its kind and its size. Every name here
-/// is checked against the parser's table by the tests.
-export const HELP_TYPES: readonly { label: string; names: string[] }[] = [
-  { label: "unsigned integer", names: ["uint8", "uint16", "uint32", "uint64"] },
-  { label: "signed integer", names: ["int8", "int16", "int32", "int64"] },
-  { label: "boolean, 8 bits", names: ["bool"] },
-  { label: "IEEE 754, 32 bits", names: ["float", "float32"] },
-  { label: "IEEE 754, 64 bits", names: ["double", "float64"] }
-];
+/// Rows of the type table, built from the parser's own type table, so the
+/// help always lists exactly what is accepted.
+export function helpTypeRows(): { label: string; names: string[] }[] {
+  const groups = new Map<string, { label: string; names: string[] }>();
+  for (const [name, type] of SCALAR_TYPES) {
+    const kindLabel = type.kind === "int" ? (type.signed ? "signed integer" : "unsigned integer") : type.kind;
+    const label = `${type.size * 8} bits, ${kindLabel}`;
+    const group = groups.get(label) ?? { label, names: [] };
+    group.names.push(name);
+    groups.set(label, group);
+  }
+  return Array.from(groups.values());
+}
 
 function section(a_title: string, ...a_children: HTMLElement[]): HTMLElement {
   const element = createElement("section");
@@ -30,7 +35,7 @@ export function buildStructHelp(): HTMLElement {
   const help = createElement("div", "help");
 
   const table = createElement("table", "help-types");
-  for (const row of HELP_TYPES) {
+  for (const row of helpTypeRows()) {
     const tableRow = createElement("tr");
     tableRow.append(createElement("td", undefined, row.label), createElement("td", "code", row.names.join(", ")));
     table.append(tableRow);
@@ -65,8 +70,7 @@ export function buildStructHelp(): HTMLElement {
 
   help.append(
     section("Types", table, list([
-      "A type is a kind and a size in bits: uint32 is a 32-bit unsigned integer.",
-      "The C names are read too, so a header can be pasted as is: uint32_t, u32, i32, int, short, char, unsigned char, long long... const, volatile and std:: are ignored.",
+      "const, volatile and std:: are ignored.",
       "long is refused: its size depends on the platform, use int32 or int64.",
       "float and double cannot be bitfields; signed bitfields are sign extended."
     ])),

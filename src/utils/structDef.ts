@@ -112,10 +112,10 @@ function buildScalarTypes(): Map<string, IScalarType> {
   const integer = (a_size: number, a_signed: boolean): IScalarType => ({ size: a_size, signed: a_signed, kind: "int" });
   for (const size of [1, 2, 4, 8]) {
     const bits = size * 8;
-    for (const name of [`uint${bits}_t`, `uint${bits}`, `u${bits}`]) {
+    for (const name of [`uint${bits}`, `u${bits}`]) {
       types.set(name, integer(size, false));
     }
-    for (const name of [`int${bits}_t`, `int${bits}`, `i${bits}`, `s${bits}`]) {
+    for (const name of [`int${bits}`, `i${bits}`, `s${bits}`]) {
       types.set(name, integer(size, true));
     }
   }
@@ -223,8 +223,13 @@ function normalizeTypeName(a_text: string): string {
 }
 
 function unknownTypeMessage(a_typeName: string): string {
+  // The C fixed size names are not used: the type is its kind and size
+  const fixed = /^(u?int)(8|16|32|64)_t$/.exec(a_typeName);
+  if (fixed !== null) {
+    return `Unknown type "${a_typeName}", use ${fixed[1]}${fixed[2]}`;
+  }
   if (/\blong\b/.test(a_typeName) && !/\blong long\b/.test(a_typeName)) {
-    return `"${a_typeName}" has a platform dependent size, use int32_t or int64_t`;
+    return `"${a_typeName}" has a platform dependent size, use int32 or int64`;
   }
   return `Unknown type "${a_typeName}"`;
 }

@@ -6,19 +6,19 @@ import { parseFieldInput } from "../src/utils/fieldInput";
 import { evaluate } from "../src/utils/expression";
 
 const DEFINITION = `
-enum MsgType : uint8_t { PING = 1, PONG, DATA = 0x10, LAST = DATA + 1 };
-typedef enum : uint8_t { LOW, HIGH = 5 } Level;
+enum MsgType : uint8 { PING = 1, PONG, DATA = 0x10, LAST = DATA + 1 };
+typedef enum : uint8 { LOW, HIGH = 5 } Level;
 enum Wide { W0 };   // int by default
 struct Header {
     MsgType  type;
-    uint8_t  version : 4;
+    uint8  version : 4;
     Level    level   : 4;
-    uint16_t length;
+    uint16 length;
 };
 struct Message {
     Header   header;
     enum MsgType kind;
-    uint8_t  payload[2];
+    uint8  payload[2];
     Header   history[2];
 };`;
 
@@ -108,14 +108,14 @@ describe("nested structures", () => {
 describe("enum bitfields", () => {
   const DEFINITION = `
     enum Bool { B_FALSE, B_TRUE };
-    enum Mode : uint8_t { M_A = 0, M_B = 2, M_C = 3 };
+    enum Mode : uint8 { M_A = 0, M_B = 2, M_C = 3 };
     enum Delta { D_MINUS = -1, D_ZERO, D_PLUS };
     struct S { Bool flag : 1; Mode mode : 2; Delta delta : 2; };`;
 
   test("are unsigned unless the enum has a negative enumerator", () => {
     const parsed = parseStruct(DEFINITION);
     assert.deepEqual(parsed.errors, []);
-    // each enum type size opens its own unit (int, uint8_t, int): flag = 1, mode = 3, delta = 0b11 (-1)
+    // each enum type size opens its own unit (int, uint8, int): flag = 1, mode = 3, delta = 0b11 (-1)
     const bytes = Uint8Array.from([0x01, 0, 0, 0, 0x03, 0x03, 0, 0, 0]);
     const fields = decodeStruct(parsed.fields, bytes, { endianness: "little", bitOrder: "lsb0" }).fields;
     const [flag, mode, delta] = fields;

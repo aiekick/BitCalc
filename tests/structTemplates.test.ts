@@ -29,14 +29,14 @@ test("the IPv4 template decodes a real header with its own options", () => {
   assert.equal(byName.get("destination[3]"), 199n);
 });
 
-test("the help lists known types and the templates use the short names", async () => {
-  const { HELP_TYPES } = await import("../src/webview/structHelp");
-  const { SCALAR_TYPES } = await import("../src/utils/structDef");
-  for (const row of HELP_TYPES) {
+test("no _t type: not listed in the help, refused by the parser, absent from the templates", async () => {
+  const { helpTypeRows } = await import("../src/webview/structHelp");
+  for (const row of helpTypeRows()) {
     for (const name of row.names) {
-      assert.ok(SCALAR_TYPES.has(name), name);
+      assert.doesNotMatch(name, /_t$/, name);
     }
   }
+  assert.deepEqual(parseStruct("struct S { uint32_t a; }").errors.map((a_error) => a_error.message), ['Unknown type "uint32_t", use uint32']);
   for (const template of STRUCT_TEMPLATES) {
     assert.doesNotMatch(template.definition, /\bu?int\d+_t\b/, template.label);
   }

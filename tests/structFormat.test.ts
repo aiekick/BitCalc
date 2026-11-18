@@ -7,7 +7,7 @@ import { STRUCT_TEMPLATES } from "../src/webview/structTemplates";
 
 describe("lexC", () => {
   test("tokens cover the whole input", () => {
-    const text = "struct A { uint8_t a : 4; /* x */ std::uint16_t b[2]; }; // end\nenum E { X = 0x1 << 2 };";
+    const text = "struct A { uint8 a : 4; /* x */ std::uint16 b[2]; }; // end\nenum E { X = 0x1 << 2 };";
     assert.equal(lexC(text).map((a_token) => a_token.text).join(""), text);
   });
 });
@@ -15,25 +15,25 @@ describe("lexC", () => {
 describe("formatDeclarations", () => {
   test("aligns structs and enums", () => {
     const input = `// messages
-enum   MsgType:uint8_t{PING=1,PONG, // second
+enum   MsgType:uint8{PING=1,PONG, // second
 DATA = 0x10,};
-struct Header{MsgType type;uint8_t version:4;
-uint8_t :4; // reserved
-uint16_t length;uint8_t data [ 4 ];};
+struct Header{MsgType type;uint8 version:4;
+uint8 :4; // reserved
+uint16 length;uint8 data [ 4 ];};
 typedef struct { Header h; } Message;`;
     const expected = `// messages
-enum MsgType : uint8_t {
+enum MsgType : uint8 {
     PING = 1,
     PONG, // second
     DATA = 0x10
 }
 
 struct Header {
-    MsgType  type;
-    uint8_t  version : 4;
-    uint8_t          : 4; // reserved
-    uint16_t length;
-    uint8_t  data[4];
+    MsgType type;
+    uint8   version : 4;
+    uint8           : 4; // reserved
+    uint16  length;
+    uint8   data[4];
 }
 
 typedef struct {
@@ -54,7 +54,7 @@ typedef struct {
   });
 
   test("plain field lists, blank lines and block comments", () => {
-    assert.equal(formatDeclarations("uint8_t a:3;uint8_t bb:5;\n\n\nuint16_t c;").text, "uint8_t  a  : 3;\nuint8_t  bb : 5;\n\nuint16_t c;\n");
+    assert.equal(formatDeclarations("uint8 a:3;uint8 bb:5;\n\n\nuint16 c;").text, "uint8  a  : 3;\nuint8  bb : 5;\n\nuint16 c;\n");
     assert.equal(
       formatDeclarations("struct S {\n/* first\n   * second\n*/\nint a;};").text,
       "struct S {\n    /* first\n     * second\n     */\n    int a;\n}\n"

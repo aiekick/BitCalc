@@ -2,7 +2,7 @@
   "name": "bitcalc",
   "displayName": "BitCalc",
   "description": "Programmer calculator and bitfield structure decoder: hex, decimal, octal, binary, bit toggling, LE/BE, LSB0/MSB0",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "publisher": "aiekick",
   "icon": "medias/icon.png",
   "galleryBanner": {

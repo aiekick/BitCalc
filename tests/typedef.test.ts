@@ -17,9 +17,9 @@ describe("typedef aliases", () => {
 
   test("aliases of enums, structures and other aliases", () => {
     const parsed = parseStruct(`
-      typedef uint32_t t_date;
+      typedef uint32 t_date;
       typedef t_date t_stamp;
-      typedef enum : uint8_t { A, B } Kind;
+      typedef enum : uint8 { A, B } Kind;
       typedef Kind t_kind;
       struct Header { t_kind kind; t_stamp stamp; };
       typedef struct Header Header;
@@ -36,7 +36,7 @@ describe("typedef aliases", () => {
   });
 
   test("bad typedefs are reported", () => {
-    const parsed = parseStruct("typedef foo t_a;\ntypedef uint8_t mac_t[6];\ntypedef t_x t_y;\ntypedef t_y t_x;\nstruct S { uint8_t a; };");
+    const parsed = parseStruct("typedef foo t_a;\ntypedef uint8 mac_t[6];\ntypedef t_x t_y;\ntypedef t_y t_x;\nstruct S { uint8 a; };");
     assert.deepEqual(parsed.errors.map((a_error) => a_error.line), [1, 2, 3, 4]);
     assert.match(parsed.errors[0].message, /Typedef "t_a": Unknown type "foo"/);
     assert.match(parsed.errors[1].message, /array typedefs are not supported/);
