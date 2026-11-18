@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.12] - 2026-11-18
+
+### Added
+
+- Struct Decoder: "Offset in" chooses 32-bit (default), 16-bit or 64-bit words, bytes or storage units. With words or bytes, the first column is the word number and Bit min / Bit max the bits of the field inside that word read in the From layout; a field spanning words shows the word range.
+
 ## [0.0.11] - 2026-11-18
 
 ### Added

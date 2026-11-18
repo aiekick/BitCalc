@@ -89,7 +89,7 @@ export function buildStructHelp(): HTMLElement {
       "Plain fields and bitfield storage units are read in the chosen byte order (LE / BE).",
       "Consecutive bitfields share a unit of their type size while they fit (MSVC rule).",
       "Inside a unit, bitfields start at bit 0: the LSB in LSB0, the MSB in MSB0.",
-      "Offset: byte of the field or of its storage unit; Bit min / Bit max: first and last bit in the unit, in the From bit order; Bits: width."
+      "Offset in: words (default 32 bits) or bytes give the word number and the bits inside it, read in the From layout; storage units give the byte of the unit and the bits inside it."
     ])),
     section("Buffer", list([
       "Hex bytes: 01 02 0A FF, 0x01, 0x02, \\x01\\x02, { 0x1, 0x2 } or 01020AFF.",

@@ -163,3 +163,4 @@ textarea.invalid { border-color: var(--vscode-inputValidation-errorBorder); }
 .offset-label { display: flex; align-items: center; gap: 4px; }
 .fields td.number { text-align: right; font-variant-numeric: tabular-nums; }
 .hl-directive { color: var(--vscode-symbolIcon-keywordForeground, #c586c0); }
+.offset-unit { display: flex; align-items: center; gap: 4px; margin-left: auto; }

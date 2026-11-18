@@ -13,6 +13,7 @@ import {
   encodeStruct,
   enumeratorName,
   fieldValue,
+  wordPlacement,
   writeSlot
 } from "../utils/structDecode";
 import { CodeEditor } from "./codeEditor";
@@ -44,6 +45,8 @@ interface IStructState {
   rootStruct: string;
   /// alignment used when the declarations set none
   alignment: "natural" | "packed";
+  /// offsets counted in words of this many bits; 0 for storage units
+  offsetWord: number;
 }
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
@@ -61,6 +64,7 @@ const state: IStructState = {
   targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
   rootStruct: "",
   alignment: "natural",
+  offsetWord: 32,
   ...readSavedState<IStructState>(),
   ...api.getState()
 };
@@ -73,6 +77,7 @@ state.targetEndianness = oneOf(state.targetEndianness, ["little", "big"], "big")
 state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
 state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
 state.alignment = oneOf(state.alignment, ["natural", "packed"], "natural");
+state.offsetWord = [0, 8, 16, 32, 64].includes(state.offsetWord) ? state.offsetWord : 32;
 const saveState = createStateSaver(api);
 
 const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
@@ -106,13 +111,22 @@ byId("app").innerHTML = `
   <div class="summary-line">
     <select id="rootStruct" title="Structure to decode" hidden></select>
     <span id="summary" class="summary"></span>
+    <label class="offset-unit" title="Unit of the Offset column; Bit min and Bit max are then numbered inside it, in the From layout">Offset in
+      <select id="offsetWord">
+        <option value="0">storage units</option>
+        <option value="8">bytes</option>
+        <option value="16">16-bit words</option>
+        <option value="32">32-bit words</option>
+        <option value="64">64-bit words</option>
+      </select>
+    </label>
   </div>
   <div class="table-wrap">
     <table class="fields">
       <thead><tr>
-        <th title="Byte offset of the field, or of the storage unit of a bitfield">Offset</th>
-        <th title="First bit, numbered in the From bit order inside the storage unit (inside the field for a plain field)">Bit min</th>
-        <th title="Last bit, numbered in the From bit order inside the storage unit (inside the field for a plain field)">Bit max</th>
+        <th id="offsetHeader">Offset</th>
+        <th title="First bit, numbered in the From layout inside the word (or the storage unit)">Bit min</th>
+        <th title="Last bit, numbered in the From layout inside the word (or the storage unit)">Bit max</th>
         <th title="Width in bits">Bits</th>
         <th>Field</th><th>Type</th>
         <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated">DEC ✎</th>
@@ -156,6 +170,13 @@ const conversionTitle = byId("conversionTitle");
 const dataTitle = byId("dataTitle");
 const byteGrid = byId("byteGrid");
 const rootSelect = byId<HTMLSelectElement>("rootStruct");
+const offsetHeader = byId("offsetHeader");
+const offsetWordSelect = byId<HTMLSelectElement>("offsetWord");
+offsetWordSelect.value = String(state.offsetWord);
+offsetWordSelect.addEventListener("change", () => {
+  state.offsetWord = Number(offsetWordSelect.value);
+  update();
+});
 const definitionEditor = new CodeEditor(definitionInput);
 
 function sourceLayout(): ILayoutOptions {
@@ -224,13 +245,29 @@ function computeModel(): IModel {
   };
 }
 
-/// Offset, first bit, last bit and width of a field. The bits are numbered
-/// in the From bit order inside the storage unit of a bitfield, or inside
-/// the field itself for a plain field.
+/// Offset, first bit, last bit and width of a field. With words, the offset
+/// is the word number and the bits are numbered inside the word read in the
+/// From layout; a field spanning words shows its word range and no bits.
+/// With storage units, the offset is the byte of the unit and the bits are
+/// numbered inside the unit (inside the field for a plain field).
 function placementCells(a_field: IDecodedField): string[] {
-  const bitMin = a_field.bitOffset ?? 0;
-  return [`+${a_field.byteOffset}`, String(bitMin), String(bitMin + a_field.bitWidth - 1), String(a_field.bitWidth)];
+  const width = String(a_field.bitWidth);
+  if (state.offsetWord === 0) {
+    const bitMin = a_field.bitOffset ?? 0;
+    return [`+${a_field.byteOffset}`, String(bitMin), String(bitMin + a_field.bitWidth - 1), width];
+  }
+  const placement = wordPlacement(a_field, state.offsetWord, sourceLayout());
+  const words = placement.firstWord === placement.lastWord ? String(placement.firstWord) : `${placement.firstWord}–${placement.lastWord}`;
+  return [words, placement.bitMin === undefined ? "—" : String(placement.bitMin), placement.bitMax === undefined ? "—" : String(placement.bitMax), width];
 }
+
+const OFFSET_HEADERS: Record<number, [string, string]> = {
+  0: ["Offset", "Byte offset of the field, or of the storage unit of a bitfield"],
+  8: ["Byte", "Byte holding the field"],
+  16: ["Word", "16-bit word holding the field, counted from 0"],
+  32: ["Word", "32-bit word holding the field, counted from 0"],
+  64: ["Word", "64-bit word holding the field, counted from 0"]
+};
 
 function addMessage(a_text: string): void {
   messages.append(createElement("li", undefined, a_text));
@@ -346,6 +383,9 @@ function valueInput(a_field: IDecodedField): HTMLInputElement {
 
 function renderFields(a_model: IModel): void {
   fieldsBody.replaceChildren();
+  const [offsetTitle, offsetHelp] = OFFSET_HEADERS[state.offsetWord];
+  offsetHeader.textContent = offsetTitle;
+  offsetHeader.title = offsetHelp;
   for (const field of a_model.decoded) {
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
     if (field.raw === undefined) {
