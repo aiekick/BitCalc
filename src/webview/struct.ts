@@ -12,7 +12,8 @@ import {
   icdAlignment,
   convertStruct,
   ConversionMode,
-  binaryInNumbering,
+  binaryDigits,
+  bitNumbers,
   mirrorStruct,
   encodeStruct,
   enumeratorName,
@@ -58,11 +59,16 @@ interface IStructState {
   /// From -> To conversion: fields keep their values, or bits keep their
   /// numbers (see ConversionMode)
   conversion: ConversionMode;
+  /// BIN column(s): the value, most significant bit on the left ("value"),
+  /// or From and To with the number of each bit in their convention
+  /// ("numbered")
+  binView: BinView;
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
 }
 
 type NameMode = "path" | "name";
+type BinView = "value" | "numbered";
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
 
@@ -81,6 +87,7 @@ const state: IStructState = {
   nameMode: "path",
   conversion: "values",
   folded: [],
+  binView: "value",
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -96,6 +103,7 @@ state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 state.conversion = oneOf(state.conversion, ["values", "mirror"], "values");
+state.binView = oneOf(state.binView, ["value", "numbered"], "value");
 state.folded = Array.isArray(state.folded) ? state.folded.filter((a_name) => typeof a_name === "string") : [];
 const saveState = createStateSaver(api);
 
@@ -141,6 +149,10 @@ byId("app").innerHTML = `
       <span class="layout-label" title="How the fields of nested structures are named">Names</span>
       <div class="segmented" id="nameMode" title="Fields of nested structures: whole path (header.version) or own name only (version)">
         <button data-value="path">Path</button><button data-value="name">Name</button>
+      </div>
+      <span class="layout-label" title="How the BIN column shows the bits">BIN</span>
+      <div class="segmented" id="binView" title="Value: the bits of the value, most significant bit on the left, the same in From and To. Numbered: BIN From and BIN To, each bit numbered in its convention (hover a bit), to see the same value labelled differently">
+        <button data-value="value">Value</button><button data-value="numbered">Numbered</button>
       </div>
       <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button><button id="copyCppComment" title="Copy the field table as a C++ comment (// lines), to paste above the structure in the code">C++ comment</button>
     </span>
@@ -495,7 +507,6 @@ interface IColumn {
 function tableColumns(): IColumn[] {
   const from = state.bitOrder.toUpperCase();
   const to = state.targetBitOrder.toUpperCase();
-  const backwards = (a_order: BitOrder): string => (a_order === "msb0" ? ": bit 0 is the most significant bit, so the value reads backwards" : "");
   const columns: IColumn[] = [
     { label: "Word", title: "Word holding the field, counted from 0", align: "right" },
     { label: "Bit min", title: "First bit of the field inside its word; the count restarts at 0 with each word", align: "right" },
@@ -510,29 +521,102 @@ function tableColumns(): IColumn[] {
   }
   columns.push(
     { label: "HEX", title: "Value of the field in From", align: "right" },
-    { label: "OCT", title: "Value of the field in From", align: "right" },
-    { label: `BIN From ${from}`, title: `Bits of the field in From, from its highest bit number to its lowest${backwards(state.bitOrder)}`, align: "right" },
-    { label: `BIN To ${to}`, title: `Bits of the field in To, from its highest bit number to its lowest${backwards(state.targetBitOrder)}`, align: "right" }
+    { label: "OCT", title: "Value of the field in From", align: "right" }
   );
+  if (state.binView === "numbered") {
+    columns.push(
+      { label: `BIN From ${from}`, title: `Bits of the value in From, most significant bit on the left, numbered in ${from} (hover a bit): ${numberingNote(state.bitOrder)}`, align: "right" },
+      { label: `BIN To ${to}`, title: `Bits of the value in To, most significant bit on the left, numbered in ${to} (hover a bit): ${numberingNote(state.targetBitOrder)}`, align: "right" }
+    );
+  } else {
+    columns.push({ label: "BIN", title: "Bits of the value in From, most significant bit on the left", align: "right" });
+    if (state.conversion === "mirror") {
+      columns.push({ label: "BIN To", title: "Bits of the value read in To, most significant bit on the left", align: "right" });
+    }
+  }
   return columns;
 }
 
-/// Cells of a_field after DEC: DEC To in Mirror mode, HEX, OCT, BIN From,
-/// BIN To.
-function valueCells(a_field: IDecodedField, a_to: IDecodedField | undefined): string[] {
+/// Which end of a field each convention numbers first.
+function numberingNote(a_order: BitOrder): string {
+  return a_order === "lsb0" ? "bit 0 is the least significant bit of the word" : "bit 0 is the most significant bit of the word";
+}
+
+/// A cell after DEC; a BIN cell of the Numbered view also carries the
+/// numbers of its bits.
+interface IValueCell {
+  readonly text: string;
+  readonly numbered?: { readonly digits: string; readonly numbers: number[]; readonly order: BitOrder };
+}
+
+/// BIN cell of a value whose field lies on bits a_first..a_last of its word.
+function binCell(a_raw: bigint | undefined, a_width: number, a_first: number, a_last: number, a_order: BitOrder | undefined): IValueCell {
+  if (a_raw === undefined) {
+    return { text: "—" };
+  }
+  const digits = binaryDigits(a_raw, a_width);
+  if (a_order === undefined) {
+    return { text: digits };
+  }
+  const numbers = bitNumbers(a_first, a_last, a_order);
+  const range = numbers.length === 1 ? `b${numbers[0]}` : `b${numbers[0]}..b${numbers[numbers.length - 1]}`;
+  return { text: `${digits} (${range})`, numbered: { digits, numbers, order: a_order } };
+}
+
+/// Cells of a_field after DEC: DEC To in Mirror mode, HEX, OCT, then the
+/// BIN column(s) of the chosen view.
+function valueCells(a_field: IDecodedField, a_to: IDecodedField | undefined): IValueCell[] {
   const raw = a_field.raw;
   const toRaw = a_to?.raw;
-  const cells: string[] = [];
+  const cells: IValueCell[] = [];
   if (state.conversion === "mirror") {
-    cells.push(a_to === undefined || toRaw === undefined ? "—" : displayValue(a_to));
+    cells.push({ text: a_to === undefined || toRaw === undefined ? "—" : displayValue(a_to) });
   }
   cells.push(
-    raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 16, true),
-    raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 8, false),
-    raw === undefined ? "—" : binaryInNumbering(raw, a_field.bitWidth, state.bitOrder),
-    toRaw === undefined ? "—" : binaryInNumbering(toRaw, a_field.bitWidth, state.targetBitOrder)
+    { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 16, true) },
+    { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 8, false) }
   );
+  const placement = placementCells(a_field);
+  const first = Number(placement[1]);
+  const last = Number(placement[2]);
+  if (state.binView === "numbered") {
+    cells.push(
+      binCell(raw, a_field.bitWidth, first, last, state.bitOrder),
+      binCell(toRaw, a_field.bitWidth, first, last, state.targetBitOrder)
+    );
+  } else {
+    cells.push(binCell(raw, a_field.bitWidth, first, last, undefined));
+    if (state.conversion === "mirror") {
+      cells.push(binCell(toRaw, a_field.bitWidth, first, last, undefined));
+    }
+  }
   return cells;
+}
+
+/// Table cell of a value; a numbered BIN cell shows each bit with its number
+/// in a tooltip and the range of numbers under the value.
+function valueElement(a_cell: IValueCell): HTMLTableCellElement {
+  const cell = createElement("td", "value");
+  if (a_cell.numbered === undefined) {
+    cell.textContent = a_cell.text;
+    return cell;
+  }
+  const { digits, numbers, order } = a_cell.numbered;
+  const bits = createElement("span", "bin-bits");
+  let index = 0;
+  for (const char of digits) {
+    if (char === " ") {
+      bits.append(" ");
+      continue;
+    }
+    const bit = createElement("span", "bin-bit", char);
+    bit.title = `bit ${numbers[index]} (${order.toUpperCase()})`;
+    bits.append(bit);
+    index++;
+  }
+  const range = createElement("span", "bin-range", numbers.length === 1 ? `b${numbers[0]}` : `b${numbers[0]} … b${numbers[numbers.length - 1]}`);
+  cell.append(bits, range);
+  return cell;
 }
 
 /// Rows of the field table as text, as copied by the export buttons.
@@ -542,7 +626,7 @@ function tableRows(a_model: IModel): string[][] {
     fieldLabel(a_field),
     a_field.typeName,
     a_field.raw === undefined ? "—" : displayValue(a_field),
-    ...valueCells(a_field, a_model.decodedTo[a_index])
+    ...valueCells(a_field, a_model.decodedTo[a_index]).map((a_cell) => a_cell.text)
   ]);
 }
 
@@ -597,11 +681,12 @@ function renderFields(a_model: IModel): void {
     return cell;
   }));
   tableNote.textContent = (state.conversion === "mirror"
-    ? "Mirror: each bit keeps its number from From to To, so a field whose bit numbering changes reads backwards in To (DEC To). "
+    ? "Mirror: each bit keeps its number from From to To, so a field whose bit numbering changes reads backwards in To (DEC To, BIN To). "
     : "Values: each field keeps its value from From to To, only its place in the bytes changes. ")
     + `Bit min / Bit max: ${bitNumbering(state.bitOrder)} in From (${state.bitOrder.toUpperCase()})`
     + (state.targetBitOrder !== state.bitOrder ? `, ${bitNumbering(state.targetBitOrder)} in To (${state.targetBitOrder.toUpperCase()})` : "")
-    + ". BIN From / BIN To write the bits from the highest bit number to the lowest, so the same value reads backwards in MSB0.";
+    + ". BIN writes the value most significant bit first"
+    + (state.binView === "numbered" ? "; Numbered labels each bit with its number in each convention (hover a bit): same bits, different labels." : ".");
   fieldsBody.replaceChildren();
   for (const [index, field] of a_model.decoded.entries()) {
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
@@ -620,8 +705,8 @@ function renderFields(a_model: IModel): void {
     const valueCell = createElement("td", "value");
     valueCell.append(field.enumDef !== undefined ? enumSelect(field, index) : valueInput(field, index));
     row.append(valueCell);
-    for (const text of valueCells(field, a_model.decodedTo[index])) {
-      row.append(createElement("td", "value", text));
+    for (const cell of valueCells(field, a_model.decodedTo[index])) {
+      row.append(valueElement(cell));
     }
     fieldsBody.append(row);
   }
@@ -867,6 +952,12 @@ const showConversion = bindSegmented<ConversionMode>(byId("conversion"), (a_mode
   update();
 });
 showConversion(state.conversion);
+
+const showBinView = bindSegmented<BinView>(byId("binView"), (a_view) => {
+  state.binView = a_view;
+  update();
+});
+showBinView(state.binView);
 
 const showNameMode = bindSegmented<NameMode>(byId("nameMode"), (a_mode) => {
   state.nameMode = a_mode;

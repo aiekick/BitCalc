@@ -426,18 +426,26 @@ export function mirrorStruct(a_bytes: Uint8Array, a_size: number, a_wordBits: nu
   return result;
 }
 
-/// The bits of a field written from its highest bit number to its lowest,
-/// in groups of 4 from the right: the usual writing in LSB0 (most
-/// significant bit on the left), reversed in MSB0, where bit 0 is the most
-/// significant bit.
-export function binaryInNumbering(a_raw: bigint, a_width: number, a_bitOrder: BitOrder): string {
-  let digits = (a_raw & ((1n << BigInt(a_width)) - 1n)).toString(2).padStart(a_width, "0");
-  if (a_bitOrder === "msb0") {
-    digits = digits.split("").reverse().join("");
-  }
+/// The bits of a field, most significant bit on the left, in groups of 4
+/// from the right: the same writing whatever the bit numbering, since the
+/// value is the same.
+export function binaryDigits(a_raw: bigint, a_width: number): string {
+  const digits = (a_raw & ((1n << BigInt(a_width)) - 1n)).toString(2).padStart(a_width, "0");
   const groups: string[] = [];
   for (let end = digits.length; end > 0; end -= 4) {
     groups.unshift(digits.slice(Math.max(0, end - 4), end));
   }
   return groups.join(" ");
+}
+
+/// Numbers, in a_bitOrder, of the bits of a field written most significant
+/// bit first, the field lying on bits a_first..a_last of its word in the
+/// allocation order (Bit min..Bit max). In LSB0 the most significant bit of
+/// the field is a_last, in MSB0 it is a_first.
+export function bitNumbers(a_first: number, a_last: number, a_bitOrder: BitOrder): number[] {
+  const numbers: number[] = [];
+  for (let index = 0; index <= a_last - a_first; index++) {
+    numbers.push(a_bitOrder === "lsb0" ? a_last - index : a_first + index);
+  }
+  return numbers;
 }

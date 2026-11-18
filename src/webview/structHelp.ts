@@ -94,7 +94,7 @@ export function buildStructHelp(): HTMLElement {
     section("Conversion", list([
       "Values (default): each field keeps its value from From to To, only its place in the bytes changes (69 stays 69).",
       "Mirror: each bit keeps its number; between LSB0 and MSB0 each word is reversed bit by bit and each field reads backwards (69 becomes 162), shown in DEC To.",
-      "BIN From / BIN To write the bits from the highest bit number to the lowest in each numbering: 69 is 0100 0101 in LSB0, 1010 0010 in MSB0."
+      "BIN writes the value most significant bit first, the same in From and To: 69 is 0100 0101. BIN Numbered adds the number of each bit in each convention: b7 … b0 in LSB0, b0 … b7 in MSB0 for a field on bits 0-7."
     ])),
     section("Buffer", list([
       "Hex bytes: 01 02 0A FF, 0x01, 0x02, \\x01\\x02, { 0x1, 0x2 } or 01020AFF.",

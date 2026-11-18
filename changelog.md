@@ -4,6 +4,16 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.36] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: BIN writes the value most significant bit first again, the same in From and To (69 is `0100 0101`, never `1010 0010`): the reversed writing in MSB0 suggested that the value changed. One BIN column by default, plus BIN To in Mirror mode.
+
+### Added
+
+- Struct Decoder: **BIN Numbered** view: BIN From and BIN To with the number of each bit in its convention (tooltip on each bit, range under the value: `b7 … b0` in LSB0, `b0 … b7` in MSB0). The exports add the range in parentheses.
+
 ## [0.0.35] - 2026-11-18
 
 ### Changed

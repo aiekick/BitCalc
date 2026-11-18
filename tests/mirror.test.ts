@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { parseStruct } from "../src/utils/structDef";
-import { binaryInNumbering, convertStruct, decodeStruct, icdAlignment, mirrorStruct } from "../src/utils/structDecode";
+import { binaryDigits, bitNumbers, convertStruct, decodeStruct, icdAlignment, mirrorStruct } from "../src/utils/structDecode";
 
 const LE_LSB0 = { endianness: "little", bitOrder: "lsb0" } as const;
 const BE_MSB0 = { endianness: "big", bitOrder: "msb0" } as const;
@@ -28,10 +28,11 @@ describe("conversion modes", () => {
     assert.equal(hex(mirrorStruct(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]), 8, 32, LE_LSB0, { endianness: "big", bitOrder: "lsb0" })), "04 03 02 01 08 07 06 05");
   });
 
-  test("binary written in the bit numbering", () => {
-    assert.equal(binaryInNumbering(69n, 8, "lsb0"), "0100 0101");
-    assert.equal(binaryInNumbering(69n, 8, "msb0"), "1010 0010");
-    assert.equal(binaryInNumbering(5n, 3, "msb0"), "101");
-    assert.equal(binaryInNumbering(1n, 6, "msb0"), "10 0000");
+  test("binary written most significant bit first, numbered per convention", () => {
+    assert.equal(binaryDigits(69n, 8), "0100 0101");
+    assert.equal(binaryDigits(5n, 3), "101");
+    assert.equal(binaryDigits(1n, 6), "00 0001");
+    assert.deepEqual(bitNumbers(8, 11, "lsb0"), [11, 10, 9, 8]);
+    assert.deepEqual(bitNumbers(8, 11, "msb0"), [8, 9, 10, 11]);
   });
 });

@@ -180,3 +180,7 @@ details.fold { margin: 6px 0; }
 details.fold > summary { display: list-item; cursor: pointer; font-weight: bold; margin: 4px 0; list-style-position: inside; }
 details.fold > summary:hover { opacity: 1; }
 .section-title.warning { color: var(--vscode-editorWarning-foreground); opacity: 1; }
+.bin-bits { display: block; }
+.bin-bit { cursor: help; }
+.bin-bit:hover { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.bin-range { display: block; font-size: 0.75em; opacity: 0.6; }
