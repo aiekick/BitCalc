@@ -42,6 +42,17 @@ export function readSavedState<TState>(): Partial<TState> {
   }
 }
 
+/// State a view starts from: the state the webview kept (it survives the
+/// view being hidden), else the one saved by the host. When the host
+/// reloads the view to apply a configuration, the saved state wins.
+export function readStartState<TState>(a_api: IVsCodeApi<TState>): Partial<TState> {
+  const saved = readSavedState<TState>();
+  if (document.body.dataset.override === "1") {
+    return saved;
+  }
+  return { ...saved, ...(a_api.getState() ?? {}) };
+}
+
 /// Keep the state in the webview (immediate) and send it to the host to be
 /// saved for good (debounced, typing does not write on every key).
 export function createStateSaver<TState>(a_api: IVsCodeApi<TState>, a_delayMs = 400): (a_state: TState) => void {

@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.20] - 2026-11-18
+
+### Added
+
+- **Config** bar at the top of both views: saves the calculator and the structure decoder together under a label, in `.vscode/<label>.bc` (plain JSON) of the first workspace folder. The list loads a configuration in both views, **Delete** (click twice) moves its file to the trash; files added or removed by hand are picked up.
+
 ## [0.0.19] - 2026-11-18
 
 ### Fixed

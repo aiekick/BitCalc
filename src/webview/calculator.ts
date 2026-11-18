@@ -21,8 +21,9 @@ import {
   oneOf,
   onHostMessage,
   readInitialConfig,
-  readSavedState
+  readStartState
 } from "./common";
+import { PRESET_BAR_HTML, bindPresetBar } from "./presets";
 
 interface ICalculatorState {
   value: string;
@@ -50,8 +51,7 @@ const state: ICalculatorState = {
   targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
   targetEndianness: config.endianness === "little" ? "big" : "little",
   expression: "",
-  ...readSavedState<ICalculatorState>(),
-  ...api.getState()
+  ...readStartState<ICalculatorState>(api)
 };
 if (!WORD_SIZES.includes(state.width)) {
   state.width = 64;
@@ -66,6 +66,7 @@ const saveState = createStateSaver(api);
 let value = normalize(BigInt(/^-?[0-9]+$/.test(state.value) ? state.value : "0"), state.width, state.signed);
 
 byId("app").innerHTML = `
+  ${PRESET_BAR_HTML}
   <div class="toolbar">
     <label>Word <select id="width">${WORD_SIZES.map((a_size) => `<option value="${a_size}">${a_size} bits</option>`).join("")}</select></label>
     <label class="check"><input type="checkbox" id="signed"> Signed</label>
@@ -390,4 +391,5 @@ signedCheck.checked = state.signed;
 showLayouts();
 expressionInput.value = state.expression;
 render();
+bindPresetBar(api, state);
 api.postMessage({ type: "ready" });

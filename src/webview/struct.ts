@@ -28,8 +28,9 @@ import {
   oneOf,
   onHostMessage,
   readInitialConfig,
-  readSavedState
+  readStartState
 } from "./common";
+import { PRESET_BAR_HTML, bindPresetBar } from "./presets";
 
 interface IStructState {
   definition: string;
@@ -66,8 +67,7 @@ const state: IStructState = {
   rootStruct: "",
   wordBits: 32,
   bufferFormat: "bytes",
-  ...readSavedState<IStructState>(),
-  ...api.getState()
+  ...readStartState<IStructState>(api)
 };
 state.definition = typeof state.definition === "string" ? state.definition : "";
 state.buffer = typeof state.buffer === "string" ? state.buffer : "";
@@ -85,6 +85,7 @@ const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-
 const BIT_ORDER_BUTTONS = `<button data-value="lsb0">LSB0</button><button data-value="msb0">MSB0</button>`;
 
 byId("app").innerHTML = `
+  ${PRESET_BAR_HTML}
   <div class="toolbar">
     <span class="layout-label" title="Layout the data is written in">From</span>
     <div class="segmented" id="endianness" title="Byte order of the data">${ENDIANNESS_BUTTONS}</div>
@@ -748,4 +749,5 @@ definitionInput.value = state.definition;
 offsetInput.value = String(state.offset);
 showLayouts();
 update();
+bindPresetBar(api, state);
 api.postMessage({ type: "ready" });

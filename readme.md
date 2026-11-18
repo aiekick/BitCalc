@@ -110,6 +110,10 @@ The fields keep the same values in both layouts; only the bytes change. The data
 
 The **DEC** column can be edited: type a value and press `Enter`, the buffer and its conversion are updated. Enum fields show a combo box with their enumerators; **Other value…** in it switches to typing any value. Integer fields accept the calculator expressions (`0x1F`, `-1`, `1 << 3`) and are truncated to the field width, typed enum values also accept enumerator names, `bool` fields accept `true`, `false`, `1` or `0`, `float` and `double` fields accept any number. `Escape` cancels. The focus stays on the edited field after `Enter`, and `Tab` / `Shift+Tab` (or `↓` / `↑` in a text field) write the value and go straight to the field of the next or previous row, so a whole structure can be typed from the keyboard. When the buffer is shorter than the structure, it is completed with zeros. Starting from an empty buffer, this builds the bytes of a structure field by field.
 
+## Configurations
+
+The **Config** bar at the top of both views saves everything they hold under a label: the calculator (value, word size, sign, layouts, expression) and the structure decoder (declarations, data, offset, layouts, word size, buffer format) together. Type a label and press **Save** (or `Enter`): the configuration is written to `.vscode/<label>.bc` in the first workspace folder, such as `.vscode/send.bc` or `.vscode/receive.bc`; an existing label is overwritten. Picking a label in the list loads it in both views. **Delete** (click twice) moves the file to the trash. The `.bc` files are plain JSON, so they can be committed with the project and shared; files added or removed by hand show up in the list. A folder must be open to save configurations.
+
 ## From the editor
 
 Right-click in the editor and open the **BitCalc** submenu, or use the Command Palette:
