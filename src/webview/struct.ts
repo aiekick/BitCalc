@@ -13,7 +13,6 @@ import {
   encodeStruct,
   enumeratorName,
   fieldValue,
-  wordPlacement,
   writeSlot
 } from "../utils/structDecode";
 import { CodeEditor } from "./codeEditor";
@@ -116,7 +115,7 @@ byId("app").innerHTML = `
   <div class="summary-line">
     <select id="rootStruct" title="Structure to decode" hidden></select>
     <span id="summary" class="summary"></span>
-    <label class="offset-unit" title="Unit of the Offset column; Bit min and Bit max are then numbered inside it, in the From layout">Offset in
+    <label class="offset-unit" title="Unit of the first column: the word or byte holding the field, or the byte of its storage unit">Offset in
       <select id="offsetWord">
         <option value="0">storage units</option>
         <option value="8">bytes</option>
@@ -130,8 +129,8 @@ byId("app").innerHTML = `
     <table class="fields">
       <thead><tr>
         <th id="offsetHeader">Offset</th>
-        <th title="First bit, numbered in the From layout inside the word (or the storage unit)">Bit min</th>
-        <th title="Last bit, numbered in the From layout inside the word (or the storage unit)">Bit max</th>
+        <th title="First bit, counted from the start of the structure (the first byte holds bits 0 to 7)">Bit min</th>
+        <th title="Last bit, counted from the start of the structure">Bit max</th>
         <th title="Width in bits">Bits</th>
         <th>Field</th><th>Type</th>
         <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: the data is updated">DEC ✎</th>
@@ -261,20 +260,21 @@ function computeModel(): IModel {
   };
 }
 
-/// Offset, first bit, last bit and width of a field. With words, the offset
-/// is the word number and the bits are numbered inside the word read in the
-/// From layout; a field spanning words shows its word range and no bits.
-/// With storage units, the offset is the byte of the unit and the bits are
-/// numbered inside the unit (inside the field for a plain field).
+/// Offset, first bit, last bit and width of a field. The bits are counted
+/// from the start of the structure in allocation order: the first byte holds
+/// bits 0..7, the second 8..15, a bitfield its unit's first bit plus its
+/// place in the unit. The offset is the word (or byte) holding the first and
+/// last bits, or the byte of the storage unit.
 function placementCells(a_field: IDecodedField): string[] {
-  const width = String(a_field.bitWidth);
-  if (state.offsetWord === 0) {
-    const bitMin = a_field.bitOffset ?? 0;
-    return [`+${a_field.byteOffset}`, String(bitMin), String(bitMin + a_field.bitWidth - 1), width];
+  const bitMin = a_field.byteOffset * 8 + (a_field.bitOffset ?? 0);
+  const bitMax = bitMin + a_field.bitWidth - 1;
+  let offset = `+${a_field.byteOffset}`;
+  if (state.offsetWord !== 0) {
+    const firstWord = Math.floor(bitMin / state.offsetWord);
+    const lastWord = Math.floor(bitMax / state.offsetWord);
+    offset = firstWord === lastWord ? String(firstWord) : `${firstWord}–${lastWord}`;
   }
-  const placement = wordPlacement(a_field, state.offsetWord, sourceLayout());
-  const words = placement.firstWord === placement.lastWord ? String(placement.firstWord) : `${placement.firstWord}–${placement.lastWord}`;
-  return [words, placement.bitMin === undefined ? "—" : String(placement.bitMin), placement.bitMax === undefined ? "—" : String(placement.bitMax), width];
+  return [offset, String(bitMin), String(bitMax), String(a_field.bitWidth)];
 }
 
 const OFFSET_HEADERS: Record<number, [string, string]> = {

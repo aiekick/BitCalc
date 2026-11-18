@@ -319,39 +319,3 @@ export function floatToRaw(a_value: number, a_size: number): bigint {
   return view.getBigUint64(0);
 }
 
-export interface IWordPlacement {
-  readonly firstWord: number;
-  readonly lastWord: number;
-  /// first and last bit inside the word, numbered in the bit order of the
-  /// layout; undefined when the field spans several words or when its bits
-  /// are not contiguous in the word
-  readonly bitMin: number | undefined;
-  readonly bitMax: number | undefined;
-}
-
-/// Where a field lies when the structure is read as consecutive words of
-/// a_wordBits bits, each word read with the byte order of a_options.
-export function wordPlacement(a_slot: IFieldSlot, a_wordBits: number, a_options: ILayoutOptions): IWordPlacement {
-  const wordBytes = a_wordBits / 8;
-  const little = a_options.endianness === "little";
-  const shift = Number(bitShift(a_slot, a_options.bitOrder));
-  const words = new Set<number>();
-  const positions: number[] = [];
-  for (let bitIndex = 0; bitIndex < a_slot.bitWidth; bitIndex++) {
-    // Physical place of the bit: byte of the unit, then bit of that byte
-    const unitBit = shift + bitIndex;
-    const unitByte = Math.floor(unitBit / 8);
-    const memoryByte = a_slot.byteOffset + (little ? unitByte : a_slot.unitSize - 1 - unitByte);
-    const word = Math.floor(memoryByte / wordBytes);
-    const byteInWord = memoryByte - word * wordBytes;
-    const wordBit = (little ? byteInWord : wordBytes - 1 - byteInWord) * 8 + (unitBit % 8);
-    words.add(word);
-    positions.push(a_options.bitOrder === "lsb0" ? wordBit : a_wordBits - 1 - wordBit);
-  }
-  const firstWord = Math.min(...words);
-  const lastWord = Math.max(...words);
-  const low = Math.min(...positions);
-  const high = Math.max(...positions);
-  const contiguous = firstWord === lastWord && high - low + 1 === a_slot.bitWidth;
-  return { firstWord, lastWord, bitMin: contiguous ? low : undefined, bitMax: contiguous ? high : undefined };
-}
