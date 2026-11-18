@@ -11,7 +11,17 @@ import {
   toUnsigned
 } from "../utils/bits";
 import { ExpressionError, evaluate } from "../utils/expression";
-import { bindSegmented, byId, createElement, getVsCodeApi, onHostMessage, readInitialConfig } from "./common";
+import {
+  bindSegmented,
+  byId,
+  createElement,
+  createStateSaver,
+  getVsCodeApi,
+  oneOf,
+  onHostMessage,
+  readInitialConfig,
+  readSavedState
+} from "./common";
 
 interface ICalculatorState {
   value: string;
@@ -33,11 +43,17 @@ const state: ICalculatorState = {
   bitOrder: config.bitOrder,
   endianness: config.endianness,
   expression: "",
+  ...readSavedState<ICalculatorState>(),
   ...api.getState()
 };
 if (!WORD_SIZES.includes(state.width)) {
   state.width = 64;
 }
+state.signed = state.signed !== false;
+state.bitOrder = oneOf(state.bitOrder, ["lsb0", "msb0"], "lsb0");
+state.endianness = oneOf(state.endianness, ["little", "big"], "little");
+state.expression = typeof state.expression === "string" ? state.expression : "";
+const saveState = createStateSaver(api);
 let value = normalize(BigInt(/^-?[0-9]+$/.test(state.value) ? state.value : "0"), state.width, state.signed);
 
 byId("app").innerHTML = `
@@ -168,7 +184,7 @@ function renderBytes(): void {
 
 function save(): void {
   state.value = value.toString();
-  api.setState(state);
+  saveState(state);
 }
 
 function render(a_skip?: HTMLInputElement): void {

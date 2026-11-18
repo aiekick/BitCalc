@@ -14,4 +14,4 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Struct Decoder templates: empty structure, bitfields example, IPv4 and UDP headers, RGB565 pixel, IEEE 754 float and double fields.
 - Struct Decoder help (? button): supported types, syntax, layout rules and buffer formats.
 - Editor commands: Evaluate Selection in Calculator, Decode Selection as Buffer, Use Selection as Structure.
-- Settings for the initial word size, signed mode, byte order and bit numbering.
+- Word size, signed mode, byte order and bit numbering chosen in the views, saved with their content in the extension global state and restored after a restart; the settings only give the starting values.

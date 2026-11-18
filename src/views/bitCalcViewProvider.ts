@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 
 /// Hosts one webview of the BitCalc panel. All the computing happens in the
 /// webview script; the host only provides the defaults from the settings,
-/// forwards editor selections and writes to the clipboard.
+/// forwards editor selections, writes to the clipboard and saves the view
+/// state (word size, sign, byte order, bit order, contents) in globalState.
 export class BitCalcViewProvider implements vscode.WebviewViewProvider {
   private m_view: vscode.WebviewView | undefined;
   private m_ready = false;
@@ -10,9 +11,15 @@ export class BitCalcViewProvider implements vscode.WebviewViewProvider {
 
   public constructor(
     private readonly m_extensionUri: vscode.Uri,
+    private readonly m_memento: vscode.Memento,
     public readonly viewId: string,
     private readonly m_scriptName: string
   ) {}
+
+  /// Key of the view state in the extension globalState
+  private get stateKey(): string {
+    return `bitcalc.viewState.${this.viewId}`;
+  }
 
   public resolveWebviewView(a_view: vscode.WebviewView): void {
     this.m_view = a_view;
@@ -24,10 +31,12 @@ export class BitCalcViewProvider implements vscode.WebviewViewProvider {
         vscode.Uri.joinPath(this.m_extensionUri, "medias")
       ]
     };
-    a_view.webview.onDidReceiveMessage((a_message: { type?: string; text?: string }) => {
+    a_view.webview.onDidReceiveMessage((a_message: { type?: string; text?: string; state?: unknown }) => {
       if (a_message.type === "ready") {
         this.m_ready = true;
         this.flush();
+      } else if (a_message.type === "saveState" && typeof a_message.state === "object" && a_message.state !== null) {
+        void this.m_memento.update(this.stateKey, a_message.state);
       } else if (a_message.type === "copy" && typeof a_message.text === "string") {
         void vscode.env.clipboard.writeText(a_message.text);
         vscode.window.setStatusBarMessage(`BitCalc: copied ${a_message.text}`, 2000);
@@ -75,7 +84,7 @@ export class BitCalcViewProvider implements vscode.WebviewViewProvider {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="${styleUri}">
 </head>
-<body data-config="${escapeHtml(JSON.stringify(initialConfig))}">
+<body data-config="${escapeHtml(JSON.stringify(initialConfig))}" data-state="${escapeHtml(JSON.stringify(this.m_memento.get(this.stateKey) ?? null))}">
   <div id="app"></div>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>

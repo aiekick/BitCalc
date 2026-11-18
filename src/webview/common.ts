@@ -31,6 +31,35 @@ export function readInitialConfig(): IInitialConfig {
   }
 }
 
+/// State saved by the host (extension globalState) the last time the view
+/// changed, written in data-state. It outlives VS Code restarts.
+export function readSavedState<TState>(): Partial<TState> {
+  try {
+    const saved = JSON.parse(document.body.dataset.state ?? "null");
+    return typeof saved === "object" && saved !== null ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
+/// Keep the state in the webview (immediate) and send it to the host to be
+/// saved for good (debounced, typing does not write on every key).
+export function createStateSaver<TState>(a_api: IVsCodeApi<TState>, a_delayMs = 400): (a_state: TState) => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return (a_state: TState): void => {
+    a_api.setState(a_state);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    const snapshot = JSON.parse(JSON.stringify(a_state));
+    timer = setTimeout(() => a_api.postMessage({ type: "saveState", state: snapshot }), a_delayMs);
+  };
+}
+
+export function oneOf<TValue extends string>(a_value: unknown, a_allowed: readonly TValue[], a_fallback: TValue): TValue {
+  return a_allowed.includes(a_value as TValue) ? (a_value as TValue) : a_fallback;
+}
+
 export interface IHostMessage {
   readonly type: string;
   readonly text?: string;

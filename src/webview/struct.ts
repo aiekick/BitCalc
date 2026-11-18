@@ -4,7 +4,17 @@ import { parseStruct } from "../utils/structDef";
 import { IDecodedField, decodeStruct, fieldValue } from "../utils/structDecode";
 import { buildStructHelp } from "./structHelp";
 import { STRUCT_TEMPLATES } from "./structTemplates";
-import { bindSegmented, byId, createElement, getVsCodeApi, onHostMessage, readInitialConfig } from "./common";
+import {
+  bindSegmented,
+  byId,
+  createElement,
+  createStateSaver,
+  getVsCodeApi,
+  oneOf,
+  onHostMessage,
+  readInitialConfig,
+  readSavedState
+} from "./common";
 
 interface IStructState {
   definition: string;
@@ -24,8 +34,15 @@ const state: IStructState = {
   offset: 0,
   endianness: config.endianness,
   bitOrder: config.bitOrder,
+  ...readSavedState<IStructState>(),
   ...api.getState()
 };
+state.definition = typeof state.definition === "string" ? state.definition : "";
+state.buffer = typeof state.buffer === "string" ? state.buffer : "";
+state.offset = Number.isInteger(state.offset) && state.offset >= 0 ? state.offset : 0;
+state.endianness = oneOf(state.endianness, ["little", "big"], "little");
+state.bitOrder = oneOf(state.bitOrder, ["lsb0", "msb0"], "lsb0");
+const saveState = createStateSaver(api);
 
 byId("app").innerHTML = `
   <div class="toolbar">
@@ -137,7 +154,7 @@ function update(): void {
     });
     fieldsBody.append(row);
   }
-  api.setState(state);
+  saveState(state);
 }
 
 definitionInput.addEventListener("input", () => {

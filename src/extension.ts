@@ -4,8 +4,8 @@ import { BitCalcViewProvider } from "./views/bitCalcViewProvider";
 
 export function activate(a_context: vscode.ExtensionContext): void {
   const views = {
-    calculator: new BitCalcViewProvider(a_context.extensionUri, "bitcalc.calculator", "calculator"),
-    struct: new BitCalcViewProvider(a_context.extensionUri, "bitcalc.struct", "struct")
+    calculator: new BitCalcViewProvider(a_context.extensionUri, a_context.globalState, "bitcalc.calculator", "calculator"),
+    struct: new BitCalcViewProvider(a_context.extensionUri, a_context.globalState, "bitcalc.struct", "struct")
   };
   for (const view of [views.calculator, views.struct]) {
     a_context.subscriptions.push(

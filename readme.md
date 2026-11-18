@@ -9,7 +9,7 @@ A programmer calculator and a bitfield structure decoder, in the VS Code panel: 
 
 BitCalc adds a **BitCalc** tab to the bottom panel, next to Terminal and Output, with two views: **Calculator** and **Struct Decoder**. You can drag either view to the side bar. The commands `BitCalc: Open Calculator` and `BitCalc: Open Struct Decoder` open them from the Command Palette.
 
-Both views keep their content when you close and reopen them.
+Every choice made in a view (word size, signed mode, byte order, bit numbering) and its content (value, expression, structure, buffer, offset) is saved and comes back when you reopen the view, even after restarting VS Code. The saved state is global: it is the same in every workspace.
 
 ## Calculator
 
@@ -79,7 +79,7 @@ Right-click in the editor and open the **BitCalc** submenu, or use the Command P
 
 ## Settings
 
-These settings give the state of the views the first time they open; after that, each view remembers its own choices.
+These settings are only the starting values. Everything can be changed in the views themselves, from one calculation to the next, and the views save what you chose: the settings are used again only before the first change.
 
 | Setting | Default | Description |
 |---|---|---|
