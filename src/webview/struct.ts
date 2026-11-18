@@ -264,9 +264,9 @@ function computeModel(): IModel {
 /// in allocation order (the first byte holds bits 0..7, a bitfield sits at
 /// the first bit of its unit plus its place in the unit) and restart at 0
 /// with each word: with 32-bit words, bit 31 is followed by bit 0 of the next
-/// word. A field spanning words shows the word range and its first and last
-/// bits in their own words. With storage units, the offset is the byte of the
-/// unit and the bits are numbered inside the unit.
+/// word. A field spanning words (packed structures) shows the word range and
+/// its bits relative to itself, 0 to width - 1. With storage units, the
+/// offset is the byte of the unit and the bits are numbered inside the unit.
 function placementCells(a_field: IDecodedField): string[] {
   const width = String(a_field.bitWidth);
   if (state.offsetWord === 0) {
@@ -277,8 +277,11 @@ function placementCells(a_field: IDecodedField): string[] {
   const last = first + a_field.bitWidth - 1;
   const firstWord = Math.floor(first / state.offsetWord);
   const lastWord = Math.floor(last / state.offsetWord);
-  const offset = firstWord === lastWord ? String(firstWord) : `${firstWord}–${lastWord}`;
-  return [offset, String(first % state.offsetWord), String(last % state.offsetWord), width];
+  if (firstWord !== lastWord) {
+    // Spanning words (packed structures): bits relative to the field
+    return [`${firstWord}–${lastWord}`, "0", String(a_field.bitWidth - 1), width];
+  }
+  return [String(firstWord), String(first % state.offsetWord), String(last % state.offsetWord), width];
 }
 
 const OFFSET_HEADERS: Record<number, [string, string]> = {
