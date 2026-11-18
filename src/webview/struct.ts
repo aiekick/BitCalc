@@ -127,6 +127,7 @@ byId("app").innerHTML = `
       <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button><button id="copyCppComment" title="Copy the field table as a C++ comment (// lines), to paste above the structure in the code">C++ comment</button>
     </span>
   </div>
+  <div class="table-note" id="tableNote"></div>
   <div class="table-wrap">
     <table class="fields">
       <thead><tr>
@@ -175,6 +176,7 @@ byId("app").innerHTML = `
       <span><span class="swatch changed">A0</span> byte that differs between From and To at this offset: the conversion moved or changed it</span>
       <span><span class="swatch">45</span> same byte in both layouts</span>
       <span><span class="swatch missing">--</span> missing in the From buffer, read as 0</span>
+      <span>+n: offset of the byte in memory; a little endian word reads +3 +2 +1 +0, a big endian one +0 +1 +2 +3</span>
     </div>
   </section>
 `;
@@ -189,6 +191,7 @@ const messages = byId("messages");
 const summary = byId("summary");
 const fieldsBody = byId("fields");
 const conversionTitle = byId("conversionTitle");
+const tableNote = byId("tableNote");
 const dataTitle = byId("dataTitle");
 const byteGrid = byId("byteGrid");
 const rootSelect = byId<HTMLSelectElement>("rootStruct");
@@ -513,7 +516,17 @@ function fieldLabel(a_field: IDecodedField): string {
   return state.nameMode === "name" ? a_field.name.slice(a_field.name.lastIndexOf(".") + 1) : a_field.name;
 }
 
+/// How a bit number reads in a bit numbering.
+function bitNumbering(a_order: BitOrder): string {
+  return a_order === "lsb0" ? "bit 0 = least significant bit of the word" : "bit 0 = most significant bit of the word";
+}
+
 function renderFields(a_model: IModel): void {
+  tableNote.textContent = "The values of the fields are the same in From and To: only their place in the bytes changes. "
+    + (state.bitOrder === state.targetBitOrder
+      ? `Bit min / Bit max: ${state.bitOrder.toUpperCase()}, ${bitNumbering(state.bitOrder)}.`
+      : `Bit min / Bit max hold in both layouts, each with its numbering: ${state.bitOrder.toUpperCase()} (From), ${bitNumbering(state.bitOrder)}; ${state.targetBitOrder.toUpperCase()} (To), ${bitNumbering(state.targetBitOrder)}.`)
+    + " HEX, OCT and BIN write the value most significant digit first.";
   fieldsBody.replaceChildren();
   for (const [index, field] of a_model.decoded.entries()) {
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
@@ -546,7 +559,7 @@ function renderFields(a_model: IModel): void {
 
 function renderConversion(a_model: IModel): void {
   dataTitle.textContent = `Data of ${a_model.name ?? "the structure"} (${a_model.size} bytes)`;
-  conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}`;
+  conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}, each word most significant byte first`;
   // The From buffer shows the bytes up to the end of the structure, as the
   // To buffer does; bytes after it are kept but not shown, and dropped as
   // soon as the From buffer is edited.
@@ -571,41 +584,66 @@ function renderConversion(a_model: IModel): void {
   renderByteGrid(a_model);
 }
 
-/// Bytes on one line of the byte grid: as many as fit in the width of the
-/// view. The grid is first drawn on one line to measure its cells.
+/// Byte grid: the From and To bytes word by word, each word shown in the
+/// reading order of its layout, most significant byte first: +3 +2 +1 +0
+/// in little endian, +0 +1 +2 +3 in big endian. Each layout has its own
+/// line of offsets. As many words on a line as the view is wide; the grid is
+/// first drawn on one line to measure its cells.
 function renderByteGrid(a_model: IModel): void {
-  drawByteGrid(a_model, Math.max(1, a_model.size));
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  const words = Math.max(1, Math.ceil(a_model.size / wordBytes));
+  drawByteGrid(a_model, words);
   const available = byteGrid.parentElement?.clientWidth ?? 0;
-  const label = byteGrid.querySelector<HTMLElement>("tr:nth-child(2) th");
-  const cells = byteGrid.querySelectorAll<HTMLElement>("tr:nth-child(2) td");
+  const label = byteGrid.querySelector<HTMLElement>("tr.byte-grid-bytes th");
+  const cells = byteGrid.querySelectorAll<HTMLElement>("tr.byte-grid-bytes td");
   if (available <= 0 || label === null || cells.length === 0) {
     return;
   }
   const cellWidth = Math.max(...Array.from(cells, (a_cell) => a_cell.getBoundingClientRect().width));
-  const perRow = Math.max(1, Math.floor((available - label.getBoundingClientRect().width - 2) / cellWidth));
-  if (perRow < a_model.size) {
+  const perRow = Math.max(1, Math.floor((available - label.getBoundingClientRect().width - 2) / (cellWidth * wordBytes)));
+  if (perRow < words) {
     drawByteGrid(a_model, perRow);
   }
 }
 
-function drawByteGrid(a_model: IModel, a_perRow: number): void {
+/// Offsets of a word in the reading order of a_endianness.
+function wordOrder(a_word: number, a_wordBytes: number, a_endianness: Endianness): number[] {
+  const offsets = Array.from({ length: a_wordBytes }, (_, a_index) => a_word * a_wordBytes + a_index);
+  return a_endianness === "little" ? offsets.reverse() : offsets;
+}
+
+function drawByteGrid(a_model: IModel, a_wordsPerRow: number): void {
   byteGrid.replaceChildren();
-  for (let start = 0; start < a_model.size; start += a_perRow) {
-    const end = Math.min(start + a_perRow, a_model.size);
-    const header = createElement("tr", "byte-grid-offsets");
-    const fromRow = createElement("tr");
-    const toRow = createElement("tr");
-    header.append(createElement("th"));
-    fromRow.append(createElement("th", undefined, "From"));
-    toRow.append(createElement("th", undefined, "To"));
-    for (let index = start; index < end; index++) {
-      header.append(createElement("th", undefined, `+${index}`));
-      const fromByte = index < a_model.bytes.length ? a_model.bytes[index] : undefined;
-      const toByte = a_model.converted[index];
-      fromRow.append(createElement("td", fromByte === undefined ? "missing" : undefined, fromByte === undefined ? "--" : hex2(fromByte)));
-      toRow.append(createElement("td", toByte !== fromByte ? "changed" : undefined, hex2(toByte)));
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  const words = Math.ceil(a_model.size / wordBytes);
+  const fromAt = (a_offset: number): number | undefined => (a_offset < a_model.bytes.length ? a_model.bytes[a_offset] : undefined);
+  const toAt = (a_offset: number): number | undefined => a_model.converted[a_offset];
+  const sides = [
+    { label: `From ${layoutName(sourceLayout())}`, endianness: state.endianness, at: fromAt, other: toAt, missing: true },
+    { label: `To ${layoutName(targetLayout())}`, endianness: state.targetEndianness, at: toAt, other: fromAt, missing: false }
+  ];
+  for (let firstWord = 0; firstWord < words; firstWord += a_wordsPerRow) {
+    const lastWord = Math.min(firstWord + a_wordsPerRow, words);
+    for (const side of sides) {
+      const header = createElement("tr", "byte-grid-offsets");
+      const row = createElement("tr", "byte-grid-bytes");
+      header.append(createElement("th"));
+      row.append(createElement("th", undefined, side.label));
+      for (let word = firstWord; word < lastWord; word++) {
+        wordOrder(word, wordBytes, side.endianness).forEach((a_offset, a_index) => {
+          const start = a_index === 0 && word > firstWord ? " word-start" : "";
+          header.append(createElement("th", start.trim() || undefined, a_offset < a_model.size ? `+${a_offset}` : ""));
+          const value = side.at(a_offset);
+          const classes = [
+            value === undefined && side.missing ? "missing" : "",
+            value !== side.other(a_offset) ? "changed" : "",
+            start.trim()
+          ].filter((a_class) => a_class !== "").join(" ");
+          row.append(createElement("td", classes || undefined, value === undefined ? "--" : hex2(value)));
+        });
+      }
+      byteGrid.append(header, row);
     }
-    byteGrid.append(header, fromRow, toRow);
   }
 }
 

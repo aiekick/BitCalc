@@ -77,6 +77,7 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .summary { margin: 6px 0; opacity: 0.85; }
 .summary.warning { color: var(--vscode-editorWarning-foreground); opacity: 1; }
 .table-wrap { overflow-x: auto; }
+.table-note { font-size: 0.9em; opacity: 0.75; margin: 2px 0 4px; }
 .fields { border-collapse: collapse; width: 100%; }
 .fields th, .fields td { text-align: left; padding: 2px 8px; border-bottom: 1px solid var(--vscode-widget-border, #8883); white-space: nowrap; }
 .fields th { font-weight: bold; opacity: 0.8; }
@@ -111,6 +112,8 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .byte-grid-offsets th { font-size: 0.75em; opacity: 0.6; text-align: center; padding-top: 6px; }
 .byte-grid td.changed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .byte-grid td.missing { opacity: 0.5; }
+.byte-grid .word-start { border-left: 10px solid transparent; }
+.byte-grid tr.byte-grid-offsets + tr.byte-grid-bytes + tr.byte-grid-offsets th { padding-top: 2px; }
 .byte-grid-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.9em; opacity: 0.85; margin-bottom: 6px; }
 .byte-grid-legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .byte-grid-legend .swatch { font-family: var(--vscode-editor-font-family); padding: 1px 5px; border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35)); }

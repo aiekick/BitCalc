@@ -4,6 +4,16 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.30] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: the Byte by byte grid shows the bytes word by word, each word in the reading order of its layout, most significant byte first (`+3 +2 +1 +0` in little endian, `+0 +1 +2 +3` in big endian), with a line of offsets for each layout, so each word reads as its value.
+
+### Added
+
+- Struct Decoder: a line above the field table recalls that the values are the same in From and To, how Bit min / Bit max are numbered in each layout, and that HEX, OCT and BIN are written most significant digit first.
+
 ## [0.0.29] - 2026-11-18
 
 ### Added
