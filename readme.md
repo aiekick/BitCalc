@@ -15,6 +15,8 @@ Every choice made in a view (word size, signed mode, byte order, bit numbering) 
 
 Works like the programmer mode of the Windows calculator.
 
+![Calculator](medias/demo_calculator.png)
+
 - **Word size**: 8, 16, 32, 64 or 128 bits. Every result is truncated to that size.
 - **Signed**: the decimal value and the operations use two's complement. Unchecked, the value is unsigned.
 - **HEX, DEC, OCT, BIN**: type in any of the four fields, the others follow. Spaces, `_` and `'` are digit separators and the `0x`, `0o`, `0b` prefixes are accepted. A field turns red when the text is not a number, and orange when the value had to be truncated to the word size. **Copy** copies the value without separators, with its C prefix (`0x`, `0`, `0b`).
@@ -50,6 +52,10 @@ The precedence is the one of C. Every intermediate result is truncated to the wo
 ## Struct Decoder
 
 Decodes a raw buffer with a C structure definition, bitfields included. Each field is shown in decimal, hex, octal and binary.
+
+![Struct Decoder: declarations and field table](medias/demo_structure_1.png)
+
+![Struct Decoder: data in both layouts, byte by byte](medias/demo_structure_2.png)
 
 **Structure**: C declarations. Typedefs and enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. A plain list of fields without braces works too. Comments are allowed. The `;` after the `}` of a structure or an enum is optional (Format drops it); fields and typedefs still end with `;`.
 
