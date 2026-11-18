@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.19] - 2026-11-18
+
+### Fixed
+
+- Struct Decoder: writing a value in the DEC column (`Enter`, `Tab`, picking an enumerator with the arrows) rebuilt the table and sent the focus back to the top of the page. The focus now stays on the field, and `Tab` / `Shift+Tab` (or `↓` / `↑` in a text field) go straight to the DEC field of the next or previous row. A refused value keeps the focus.
+
 ## [0.0.18] - 2026-11-18
 
 ### Added

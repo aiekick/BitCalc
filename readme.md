@@ -108,7 +108,7 @@ The fields keep the same values in both layouts; only the bytes change. The data
 
 ### Editing values
 
-The **DEC** column can be edited: type a value and press `Enter`, the buffer and its conversion are updated. Enum fields show a combo box with their enumerators; **Other value…** in it switches to typing any value. Integer fields accept the calculator expressions (`0x1F`, `-1`, `1 << 3`) and are truncated to the field width, typed enum values also accept enumerator names, `bool` fields accept `true`, `false`, `1` or `0`, `float` and `double` fields accept any number. `Escape` cancels. When the buffer is shorter than the structure, it is completed with zeros. Starting from an empty buffer, this builds the bytes of a structure field by field.
+The **DEC** column can be edited: type a value and press `Enter`, the buffer and its conversion are updated. Enum fields show a combo box with their enumerators; **Other value…** in it switches to typing any value. Integer fields accept the calculator expressions (`0x1F`, `-1`, `1 << 3`) and are truncated to the field width, typed enum values also accept enumerator names, `bool` fields accept `true`, `false`, `1` or `0`, `float` and `double` fields accept any number. `Escape` cancels. The focus stays on the edited field after `Enter`, and `Tab` / `Shift+Tab` (or `↓` / `↑` in a text field) write the value and go straight to the field of the next or previous row, so a whole structure can be typed from the keyboard. When the buffer is shorter than the structure, it is completed with zeros. Starting from an empty buffer, this builds the bytes of a structure field by field.
 
 ## From the editor
 

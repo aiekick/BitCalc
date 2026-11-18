@@ -291,10 +291,56 @@ function displayValue(a_field: IDecodedField): string {
 
 const OTHER_VALUE = "\u0000other";
 
+/// Row whose DEC control takes the focus back once the table is rebuilt:
+/// writing a value rebuilds the whole table, which would otherwise send the
+/// focus back to the top of the page.
+let pendingFocus: number | undefined;
+
+function focusRow(a_row: number): boolean {
+  const control = fieldsBody.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-row="${a_row}"]`);
+  if (control === null) {
+    return false;
+  }
+  control.focus();
+  if (control instanceof HTMLInputElement) {
+    control.select();
+  }
+  return true;
+}
+
+/// Write the value (a_commit), then put the focus on the DEC control of
+/// a_row, whether the table was rebuilt or not. When the value is refused
+/// (a_commit returns false), the focus stays where it is.
+function commitAndFocus(a_commit: () => boolean | void, a_row: number): void {
+  pendingFocus = a_row;
+  const accepted = a_commit();
+  if (accepted === false) {
+    pendingFocus = undefined;
+    return;
+  }
+  if (pendingFocus !== undefined) {
+    pendingFocus = undefined;
+    focusRow(a_row);
+  }
+}
+
+/// Tab / Shift+Tab, and the arrows in a text field, go to the DEC control of
+/// the next or previous row. Returns the row to go to, or undefined.
+function navigationTarget(a_event: KeyboardEvent, a_row: number, a_arrows: boolean): number | undefined {
+  let target: number | undefined;
+  if (a_event.key === "Tab" && !a_event.ctrlKey && !a_event.altKey) {
+    target = a_event.shiftKey ? a_row - 1 : a_row + 1;
+  } else if (a_arrows && (a_event.key === "ArrowDown" || a_event.key === "ArrowUp") && !a_event.ctrlKey && !a_event.altKey && !a_event.shiftKey) {
+    target = a_event.key === "ArrowDown" ? a_row + 1 : a_row - 1;
+  }
+  return target !== undefined && fieldsBody.querySelector(`[data-row="${target}"]`) !== null ? target : undefined;
+}
+
 /// Combo box of an enum field: its enumerators, the current value when it
 /// matches none of them, and "Other value…" to type any value instead.
-function enumSelect(a_field: IDecodedField): HTMLSelectElement {
+function enumSelect(a_field: IDecodedField, a_row: number): HTMLSelectElement {
   const select = createElement("select", "value-input value-select");
+  select.dataset.row = String(a_row);
   const enumDef = a_field.enumDef;
   if (enumDef === undefined) {
     return select;
@@ -324,21 +370,29 @@ function enumSelect(a_field: IDecodedField): HTMLSelectElement {
 
   select.addEventListener("change", () => {
     if (select.value === OTHER_VALUE) {
-      const input = valueInput(a_field);
+      const input = valueInput(a_field, a_row);
       select.replaceWith(input);
       input.focus();
       input.select();
       return;
     }
     if (select.value !== "") {
-      writeField(a_field, parseFieldInput(a_field, select.value));
+      commitAndFocus(() => writeField(a_field, parseFieldInput(a_field, select.value)), a_row);
+    }
+  });
+  select.addEventListener("keydown", (a_event) => {
+    const target = navigationTarget(a_event, a_row, false);
+    if (target !== undefined) {
+      a_event.preventDefault();
+      focusRow(target);
     }
   });
   return select;
 }
 
-function valueInput(a_field: IDecodedField): HTMLInputElement {
+function valueInput(a_field: IDecodedField, a_row: number): HTMLInputElement {
   const input = createElement("input", "value-input");
+  input.dataset.row = String(a_row);
   const value = displayValue(a_field);
   input.value = value;
   input.placeholder = "—";
@@ -346,21 +400,40 @@ function valueInput(a_field: IDecodedField): HTMLInputElement {
   input.title = a_field.enumDef !== undefined
     ? `Type a value, an expression or one of: ${a_field.enumDef.members.map((a_member) => a_member.name).join(", ")}`
     : "Type a value or an expression and press Enter";
-  const commit = (): void => {
+  const commit = (): boolean => {
     if (input.value === value) {
-      return;
+      return true;
     }
     try {
       writeField(a_field, parseFieldInput(a_field, input.value));
+      return true;
     } catch (a_error) {
       input.classList.add("invalid");
       input.title = a_error instanceof Error ? a_error.message : String(a_error);
+      return false;
     }
   };
-  input.addEventListener("change", commit);
-  input.addEventListener("keydown", (a_event) => {
-    if (a_event.key === "Enter") {
+  // Leaving the field writes it; when the focus goes to another DEC control,
+  // it is given back to that control after the table is rebuilt.
+  input.addEventListener("blur", (a_event) => {
+    if (!input.isConnected) {
+      return;
+    }
+    const next = a_event.relatedTarget instanceof HTMLElement ? a_event.relatedTarget.dataset.row : undefined;
+    if (next !== undefined) {
+      commitAndFocus(commit, Number(next));
+    } else {
       commit();
+    }
+  });
+  input.addEventListener("keydown", (a_event) => {
+    const target = navigationTarget(a_event, a_row, true);
+    if (target !== undefined) {
+      a_event.preventDefault();
+      commitAndFocus(commit, target);
+    } else if (a_event.key === "Enter") {
+      a_event.preventDefault();
+      commitAndFocus(commit, a_row);
     } else if (a_event.key === "Escape") {
       input.value = value;
       input.classList.remove("invalid");
@@ -400,7 +473,7 @@ function fieldsMarkdown(a_model: IModel): string {
 
 function renderFields(a_model: IModel): void {
   fieldsBody.replaceChildren();
-  for (const field of a_model.decoded) {
+  for (const [index, field] of a_model.decoded.entries()) {
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
     if (field.raw === undefined) {
       row.classList.add("missing");
@@ -413,12 +486,17 @@ function renderFields(a_model: IModel): void {
       row.append(createElement("td", undefined, text));
     }
     const valueCell = createElement("td", "value");
-    valueCell.append(field.enumDef !== undefined ? enumSelect(field) : valueInput(field));
+    valueCell.append(field.enumDef !== undefined ? enumSelect(field, index) : valueInput(field, index));
     row.append(valueCell);
     for (const text of valueCells(field)) {
       row.append(createElement("td", "value", text));
     }
     fieldsBody.append(row);
+  }
+  if (pendingFocus !== undefined) {
+    const focus = pendingFocus;
+    pendingFocus = undefined;
+    focusRow(focus);
   }
 }
 
