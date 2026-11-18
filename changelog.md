@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.35] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: the From buffer always covers the whole structure, like the To buffer: a shorter buffer is completed with zeros, except while it is being typed in, so From and To have the same number of words.
+
 ## [0.0.34] - 2026-11-18
 
 ### Changed

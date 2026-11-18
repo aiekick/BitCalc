@@ -737,6 +737,15 @@ function hex2(a_byte: number): string {
 
 function update(): void {
   model = computeModel();
+  // From always covers the whole structure, as To does: a shorter buffer is
+  // completed with zeros, except while it is being typed
+  const required = state.offset + model.size;
+  if (document.activeElement !== bufferInput && model.size > 0 && model.allBytes.length < required) {
+    const bytes = new Uint8Array(required);
+    bytes.set(model.allBytes);
+    state.buffer = formatHexBytes(bytes);
+    model = computeModel();
+  }
   renderFields(model);
   renderConversion(model);
   saveState(state);
