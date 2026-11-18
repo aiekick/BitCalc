@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { formatHexBytes, parseHexBytes } from "../src/utils/hexBytes";
+import { BUFFER_FORMATS, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../src/utils/hexBytes";
 
 describe("parseHexBytes", () => {
   test("accepts the usual notations", () => {
@@ -17,5 +17,33 @@ describe("parseHexBytes", () => {
 
   test("formatHexBytes", () => {
     assert.equal(formatHexBytes([1, 0xAB]), "01 AB");
+  });
+});
+
+describe("buffer formats", () => {
+  const bytes = [0xFA, 0x00, 0x12, 0x34, 0x56];
+
+  test("formatBuffer", () => {
+    assert.equal(formatBuffer(bytes, "bytes", "little"), "FA 00 12 34 56");
+    assert.equal(formatBuffer(bytes, "bytes0x", "little"), "0xFA, 0x00, 0x12, 0x34, 0x56");
+    assert.equal(formatBuffer(bytes, "words16", "big"), "0xFA00, 0x1234, 0x56");
+    assert.equal(formatBuffer(bytes, "words16", "little"), "0x00FA, 0x3412, 0x56");
+    assert.equal(formatBuffer(bytes, "words32", "big"), "0xFA001234, 0x56");
+  });
+
+  test("parseBuffer round trips and accepts loose words", () => {
+    for (const format of BUFFER_FORMATS) {
+      for (const endianness of ["little", "big"] as const) {
+        assert.deepEqual(Array.from(parseBuffer(formatBuffer(bytes, format, endianness), format, endianness).bytes), bytes, `${format} ${endianness}`);
+      }
+    }
+    assert.deepEqual(Array.from(parseBuffer("0x1, 0xFA00", "words16", "big").bytes), [0x00, 0x01, 0xFA, 0x00]);
+    assert.match(parseBuffer("0x12345", "words16", "big").error ?? "", /does not fit in 16 bits/);
+    assert.match(parseBuffer("0xZZ", "words16", "big").error ?? "", /not a hex word/);
+  });
+
+  test("formatBufferCArray", () => {
+    assert.equal(formatBufferCArray(bytes, "words16", "big"), "{ 0xFA00, 0x1234, 0x56 }");
+    assert.equal(formatBufferCArray(bytes, "bytes", "big"), "{ 0xFA, 0x00, 0x12, 0x34, 0x56 }");
   });
 });

@@ -1,6 +1,6 @@
 import { BitOrder, Endianness, formatBits, groupDigits } from "../utils/bits";
 import { parseFieldInput } from "../utils/fieldInput";
-import { formatCArray, formatHexBytes, parseHexBytes } from "../utils/hexBytes";
+import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
 import { formatDeclarations } from "../utils/structFormat";
 import {
@@ -47,6 +47,9 @@ interface IStructState {
   alignment: "natural" | "packed";
   /// offsets counted in words of this many bits; 0 for storage units
   offsetWord: number;
+  /// how both buffers are shown, typed and copied; state.buffer itself is
+  /// always kept as hex bytes
+  bufferFormat: BufferFormat;
 }
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
@@ -65,6 +68,7 @@ const state: IStructState = {
   rootStruct: "",
   alignment: "natural",
   offsetWord: 32,
+  bufferFormat: "bytes",
   ...readSavedState<IStructState>(),
   ...api.getState()
 };
@@ -78,6 +82,7 @@ state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
 state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
 state.alignment = oneOf(state.alignment, ["natural", "packed"], "natural");
 state.offsetWord = [0, 8, 16, 32, 64].includes(state.offsetWord) ? state.offsetWord : 32;
+state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 const saveState = createStateSaver(api);
 
 const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
@@ -136,19 +141,30 @@ byId("app").innerHTML = `
     </table>
   </div>
   <section class="data">
-    <h3 class="data-title" id="dataTitle"></h3>
+    <div class="pane-header">
+      <h3 class="data-title" id="dataTitle"></h3>
+      <label class="offset-label" title="How both buffers are shown, typed and copied; words are read in the byte order of their layout">Format
+        <select id="bufferFormat">
+          <option value="bytes">bytes: FA 00</option>
+          <option value="bytes0x">bytes: 0xFA, 0x00</option>
+          <option value="words16">16-bit words: 0xFA00</option>
+          <option value="words32">32-bit words: 0xFA001234</option>
+          <option value="words64">64-bit words</option>
+        </select>
+      </label>
+    </div>
     <div class="pane-header">
       <label class="section-title" for="buffer" id="bufferLabel"></label>
       <label class="offset-label" title="Number of bytes skipped before the structure">Offset <input type="number" id="offset" min="0" class="offset"></label>
       <span class="copy-group">
-        <button data-copy="from-hex" title="Copy the structure bytes as hex">Hex</button><button data-copy="from-c" title="Copy the structure bytes as a C array">C array</button>
+        <button data-copy="from-text" title="Copy the structure bytes in the chosen format">Copy</button><button data-copy="from-c" title="Copy the structure bytes as a C array in the chosen format">C array</button>
       </span>
     </div>
-    <textarea id="buffer" spellcheck="false" rows="3" placeholder="01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"></textarea>
+    <textarea id="buffer" spellcheck="false" rows="3"></textarea>
     <div class="pane-header">
       <label class="section-title" for="targetBuffer" id="targetBufferLabel"></label>
       <span class="copy-group">
-        <button data-copy="to-hex" title="Copy the converted bytes as hex">Hex</button><button data-copy="to-c" title="Copy the converted bytes as a C array">C array</button>
+        <button data-copy="to-text" title="Copy the converted bytes in the chosen format">Copy</button><button data-copy="to-c" title="Copy the converted bytes as a C array in the chosen format">C array</button>
       </span>
     </div>
     <textarea id="targetBuffer" spellcheck="false" rows="3" title="The data in the To layout. Edit it to rewrite the From data through the reverse conversion"></textarea>
@@ -284,7 +300,6 @@ function writeField(a_field: IDecodedField, a_raw: bigint): void {
   bytes.set(model.allBytes);
   writeSlot(a_field, a_raw, bytes.subarray(state.offset, required), sourceLayout());
   state.buffer = formatHexBytes(bytes);
-  bufferInput.value = state.buffer;
   update();
 }
 
@@ -419,10 +434,18 @@ function renderFields(a_model: IModel): void {
 function renderConversion(a_model: IModel): void {
   dataTitle.textContent = `Data of ${a_model.name ?? "the structure"} (${a_model.size} bytes)`;
   conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}`;
-  bufferLabel.textContent = `From ${layoutName(sourceLayout())} (hex bytes)`;
+  bufferLabel.textContent = `From ${layoutName(sourceLayout())}`;
   targetBufferLabel.textContent = `To ${layoutName(targetLayout())}`;
+  if (document.activeElement !== bufferInput) {
+    bufferInput.value = formatBuffer(a_model.allBytes, state.bufferFormat, state.endianness);
+    bufferInput.classList.remove("invalid");
+    bufferInput.title = "";
+  }
+  bufferInput.placeholder = state.bufferFormat === "bytes" || state.bufferFormat === "bytes0x"
+    ? "01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"
+    : `Hex words, e.g. ${formatBuffer([0xFA, 0x00, 0x12, 0x34], state.bufferFormat, state.endianness)}`;
   if (document.activeElement !== targetBufferInput) {
-    targetBufferInput.value = formatHexBytes(a_model.converted);
+    targetBufferInput.value = formatBuffer(a_model.converted, state.bufferFormat, state.targetEndianness);
     targetBufferInput.classList.remove("invalid");
   }
   byteGrid.replaceChildren();
@@ -466,7 +489,7 @@ targetBufferInput.addEventListener("input", () => {
   if (model === undefined) {
     return;
   }
-  const typed = parseHexBytes(targetBufferInput.value);
+  const typed = parseBuffer(targetBufferInput.value, state.bufferFormat, state.targetEndianness);
   if (typed.error !== undefined) {
     targetBufferInput.classList.add("invalid");
     targetBufferInput.title = typed.error;
@@ -480,12 +503,27 @@ targetBufferInput.addEventListener("input", () => {
   bytes.set(model.allBytes);
   bytes.set(fromBytes, state.offset);
   state.buffer = formatHexBytes(bytes);
-  bufferInput.value = state.buffer;
   update();
 });
 targetBufferInput.addEventListener("blur", () => update());
+/// The From buffer is typed in the chosen format and kept as hex bytes.
 bufferInput.addEventListener("input", () => {
-  state.buffer = bufferInput.value;
+  const typed = parseBuffer(bufferInput.value, state.bufferFormat, state.endianness);
+  if (typed.error !== undefined) {
+    bufferInput.classList.add("invalid");
+    bufferInput.title = typed.error;
+    return;
+  }
+  bufferInput.classList.remove("invalid");
+  bufferInput.title = "";
+  state.buffer = formatHexBytes(typed.bytes);
+  update();
+});
+bufferInput.addEventListener("blur", () => update());
+const bufferFormatSelect = byId<HTMLSelectElement>("bufferFormat");
+bufferFormatSelect.value = state.bufferFormat;
+bufferFormatSelect.addEventListener("change", () => {
+  state.bufferFormat = oneOf(bufferFormatSelect.value, BUFFER_FORMATS, "bytes");
   update();
 });
 rootSelect.addEventListener("change", () => {
@@ -525,7 +563,6 @@ byId("swapLayouts").addEventListener("click", () => {
   bytes.set(model.allBytes);
   bytes.set(model.converted, state.offset);
   state.buffer = formatHexBytes(bytes);
-  bufferInput.value = state.buffer;
   [state.endianness, state.targetEndianness] = [state.targetEndianness, state.endianness];
   [state.bitOrder, state.targetBitOrder] = [state.targetBitOrder, state.bitOrder];
   showLayouts();
@@ -537,9 +574,13 @@ for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("bu
     if (model === undefined) {
       return;
     }
-    const [which, format] = (button.dataset.copy ?? "").split("-");
+    const [which, kind] = (button.dataset.copy ?? "").split("-");
     const bytes = which === "to" ? model.converted : model.bytes.subarray(0, model.size);
-    api.postMessage({ type: "copy", text: format === "c" ? formatCArray(bytes) : formatHexBytes(bytes) });
+    const endianness = which === "to" ? state.targetEndianness : state.endianness;
+    api.postMessage({
+      type: "copy",
+      text: kind === "c" ? formatBufferCArray(bytes, state.bufferFormat, endianness) : formatBuffer(bytes, state.bufferFormat, endianness)
+    });
   });
 }
 
@@ -604,8 +645,10 @@ onHostMessage((a_message) => {
     return;
   }
   if (a_message.type === "setBuffer") {
-    state.buffer = a_message.text;
-    bufferInput.value = a_message.text;
+    // The selection may be in the chosen format or in plain hex bytes
+    const inFormat = parseBuffer(a_message.text, state.bufferFormat, state.endianness);
+    const bytes = inFormat.error === undefined ? inFormat.bytes : parseHexBytes(a_message.text).bytes;
+    state.buffer = formatHexBytes(bytes);
   } else if (a_message.type === "setDefinition") {
     state.definition = a_message.text;
     definitionInput.value = a_message.text;
@@ -627,7 +670,6 @@ function showLayouts(): void {
 }
 
 definitionInput.value = state.definition;
-bufferInput.value = state.buffer;
 offsetInput.value = String(state.offset);
 showLayouts();
 update();
