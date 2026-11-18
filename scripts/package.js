@@ -183,6 +183,35 @@ filesToInclude.forEach(([sourceName, entryName]) => {
     }
 });
 
+// The extension page of VS Code and the Marketplace do not load images of
+// the readme from the package: like vsce, relative image links are made
+// absolute on the repository (raw files of its default branch). The readme
+// of the repository itself keeps its relative links.
+function absoluteReadmeImages(aText, aRepositoryUrl) {
+    if (!aRepositoryUrl) {
+        return aText;
+    }
+    const base = `${aRepositoryUrl.replace(/\.git$/, '').replace(/\/$/, '')}/raw/HEAD/`;
+    const isRelative = (aLink) => !/^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(aLink);
+    const absolute = (aLink) => base + aLink.replace(/^\.\//, '').replace(/^\//, '');
+    return aText
+        .replace(/(!\[[^\]]*\]\()([^)\s]+)((?:\s+"[^"]*")?\))/g,
+            (aMatch, aStart, aLink, aEnd) => (isRelative(aLink) ? `${aStart}${absolute(aLink)}${aEnd}` : aMatch))
+        .replace(/(<img\b[^>]*\bsrc=")([^"]+)(")/gi,
+            (aMatch, aStart, aLink, aEnd) => (isRelative(aLink) ? `${aStart}${absolute(aLink)}${aEnd}` : aMatch));
+}
+
+{
+    const packageRepository = typeof packageJson.repository === 'string'
+        ? packageJson.repository
+        : packageJson.repository && packageJson.repository.url;
+    for (const [entryName, content] of extensionFiles) {
+        if (entryName.toLowerCase() === 'readme.md') {
+            extensionFiles.set(entryName, Buffer.from(absoluteReadmeImages(content.toString('utf8'), packageRepository), 'utf8'));
+        }
+    }
+}
+
 foldersToInclude.forEach(folderName => {
     const folderPath = path.join(projectRoot, folderName);
     if (fs.existsSync(folderPath) && fs.lstatSync(folderPath).isDirectory()) {

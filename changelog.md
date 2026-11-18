@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.38] - 2026-11-18
+
+### Fixed
+
+- Packaging: the relative image links of the readme are made absolute on the repository (`https://github.com/aiekick/bitcalc/raw/HEAD/...`) in the package, as vsce does, since the extension page of VS Code and the Marketplace do not load them from the package. The images show once they are pushed to the repository.
+
 ## [0.0.37] - 2026-11-18
 
 ### Added
