@@ -13,6 +13,8 @@
 ///     uint8_t  data[4];        // array
 ///   };
 ///
+/// `typedef <type> <alias>;` declares an alias of a scalar, enum or structure
+/// type, usable before or after its declaration.
 /// The last structure is the one decoded unless another one is asked for. A
 /// plain list of fields without any braces is one anonymous structure.
 /// Only fixed size scalar types are known; `long` is refused because its size
@@ -79,6 +81,13 @@ export interface IParseError {
   readonly message: string;
 }
 
+/// typedef alias: `typedef uint32_t t_date;`
+export interface ITypedef {
+  readonly name: string;
+  readonly target: string;
+  readonly line: number;
+}
+
 export interface IStructParseResult {
   /// name and fields of the decoded (root) structure
   readonly name: string | undefined;
@@ -86,6 +95,7 @@ export interface IStructParseResult {
   /// every structure and enum, in the order of the text
   readonly structs: IStructDef[];
   readonly enums: IEnumDef[];
+  readonly typedefs: ITypedef[];
   readonly errors: IParseError[];
 }
 
@@ -258,6 +268,52 @@ function splitWithLines(a_text: string, a_start: number, a_end: number, a_separa
   return pieces;
 }
 
+const TYPEDEF = /^typedef\s+(.+?)\s+([A-Za-z_]\w*)\s*(\[[^\]]*\])?$/;
+
+/// Record a typedef alias. `typedef struct X X;` declares nothing new and is
+/// skipped; typedefs of arrays are refused.
+function parseTypedef(a_statement: string, a_line: number, a_typedefs: Map<string, ITypedef>, a_errors: IParseError[]): void {
+  const match = TYPEDEF.exec(a_statement.replace(/\s+/g, " "));
+  if (match === null) {
+    a_errors.push({ line: a_line, message: `Unsupported typedef "${a_statement}"` });
+    return;
+  }
+  if (match[3] !== undefined) {
+    a_errors.push({ line: a_line, message: `Typedef "${match[2]}": array typedefs are not supported` });
+    return;
+  }
+  const target = normalizeTypeName(match[1]);
+  if (target === match[2]) {
+    return;
+  }
+  if (a_typedefs.has(match[2])) {
+    a_errors.push({ line: a_line, message: `Typedef "${match[2]}" is defined twice` });
+  }
+  a_typedefs.set(match[2], { name: match[2], target, line: a_line });
+}
+
+/// Resolver that also follows typedef aliases (a bounded number of times, so
+/// that a cycle of aliases simply resolves to nothing).
+function withTypedefs(a_resolve: TypeResolver, a_typedefs: ReadonlyMap<string, ITypedef>): TypeResolver {
+  const resolve = (a_typeName: string, a_depth: number): ResolvedType | undefined => {
+    const direct = a_resolve(a_typeName);
+    if (direct !== undefined || a_depth >= 16) {
+      return direct;
+    }
+    const alias = a_typedefs.get(a_typeName);
+    return alias !== undefined ? resolve(alias.target, a_depth + 1) : undefined;
+  };
+  return (a_typeName) => resolve(a_typeName, 0);
+}
+
+function checkTypedefs(a_typedefs: ReadonlyMap<string, ITypedef>, a_resolve: TypeResolver, a_errors: IParseError[]): void {
+  for (const alias of a_typedefs.values()) {
+    if (a_resolve(alias.name) === undefined) {
+      a_errors.push({ line: alias.line, message: `Typedef "${alias.name}": ${unknownTypeMessage(alias.target)}` });
+    }
+  }
+}
+
 interface IBlock {
   readonly kind: "struct" | "enum";
   readonly name: string | undefined;
@@ -269,8 +325,8 @@ interface IBlock {
 }
 
 /// Find the top level { } blocks and what they declare. Text between blocks
-/// may only be typedef forward declarations.
-function scanBlocks(a_text: string, a_errors: IParseError[]): IBlock[] {
+/// may only be typedefs.
+function scanBlocks(a_text: string, a_typedefs: Map<string, ITypedef>, a_errors: IParseError[]): IBlock[] {
   const blocks: IBlock[] = [];
   let cursor = 0;
   for (;;) {
@@ -290,7 +346,9 @@ function scanBlocks(a_text: string, a_errors: IParseError[]): IBlock[] {
     }
     const headerStart = a_text.lastIndexOf(";", open) + 1 > cursor ? a_text.lastIndexOf(";", open) + 1 : cursor;
     for (const loose of splitWithLines(a_text, cursor, headerStart, ";")) {
-      if (!/^typedef\b/.test(loose.text)) {
+      if (/^typedef\b/.test(loose.text)) {
+        parseTypedef(loose.text, loose.line, a_typedefs, a_errors);
+      } else {
         a_errors.push({ line: loose.line, message: `Unexpected "${loose.text}" outside of a structure` });
       }
     }
@@ -318,7 +376,9 @@ function scanBlocks(a_text: string, a_errors: IParseError[]): IBlock[] {
     }
   }
   for (const loose of splitWithLines(a_text, cursor, a_text.length, ";")) {
-    if (!/^typedef\b/.test(loose.text)) {
+    if (/^typedef\b/.test(loose.text)) {
+      parseTypedef(loose.text, loose.line, a_typedefs, a_errors);
+    } else {
       a_errors.push({ line: loose.line, message: `Unexpected "${loose.text}" outside of a structure` });
     }
   }
@@ -360,9 +420,26 @@ function parseEnum(
   return { name: a_block.name ?? "(anonymous enum)", underlyingName, underlying, members };
 }
 
-function parseFields(a_text: string, a_start: number, a_end: number, a_resolve: TypeResolver, a_errors: IParseError[]): IFieldDef[] {
+function parseFields(
+  a_text: string,
+  a_start: number,
+  a_end: number,
+  a_resolve: TypeResolver,
+  a_typedefs: Map<string, ITypedef>,
+  a_errors: IParseError[]
+): IFieldDef[] {
   const fields: IFieldDef[] = [];
-  for (const statement of splitWithLines(a_text, a_start, a_end, ";")) {
+  const statements = splitWithLines(a_text, a_start, a_end, ";");
+  // typedefs first: a field may use an alias declared below it
+  for (const statement of statements) {
+    if (/^typedef\b/.test(statement.text)) {
+      parseTypedef(statement.text, statement.line, a_typedefs, a_errors);
+    }
+  }
+  for (const statement of statements) {
+    if (/^typedef\b/.test(statement.text)) {
+      continue;
+    }
     if (statement.text.includes("{")) {
       a_errors.push({ line: statement.line, message: "Nested definitions are not supported, declare the structure or enum before" });
       continue;
@@ -405,18 +482,21 @@ function breakCycles(a_structs: IStructDef[], a_errors: IParseError[]): void {
 export function parseStruct(a_text: string, a_rootName?: string): IStructParseResult {
   const text = stripComments(a_text);
   const errors: IParseError[] = [];
+  const typedefs = new Map<string, ITypedef>();
   if (!text.includes("{")) {
-    // A plain list of fields: one anonymous structure
-    const resolve: TypeResolver = (a_typeName) => {
+    // A plain list of fields (and typedefs): one anonymous structure
+    const resolve = withTypedefs((a_typeName) => {
       const type = SCALAR_TYPES.get(a_typeName);
       return type === undefined ? undefined : { kind: "scalar", type };
-    };
-    const fields = parseFields(text, 0, text.length, resolve, errors);
+    }, typedefs);
+    const fields = parseFields(text, 0, text.length, resolve, typedefs, errors);
+    checkTypedefs(typedefs, resolve, errors);
+    errors.sort((a_left, a_right) => a_left.line - a_right.line);
     const root: IStructDef = { name: undefined, fields, line: 1 };
-    return { name: undefined, fields, structs: [root], enums: [], errors };
+    return { name: undefined, fields, structs: [root], enums: [], typedefs: Array.from(typedefs.values()), errors };
   }
 
-  const blocks = scanBlocks(text, errors);
+  const blocks = scanBlocks(text, typedefs, errors);
   const enums = new Map<string, IEnumDef>();
   const structs = new Map<string, IStructDef>();
   const structList: IStructDef[] = [];
@@ -441,7 +521,7 @@ export function parseStruct(a_text: string, a_rootName?: string): IStructParseRe
     structBlocks.push([block, structDef]);
   }
 
-  const resolve: TypeResolver = (a_typeName) => {
+  const resolve = withTypedefs((a_typeName) => {
     const scalar = SCALAR_TYPES.get(a_typeName);
     if (scalar !== undefined) {
       return { kind: "scalar", type: scalar };
@@ -452,10 +532,11 @@ export function parseStruct(a_text: string, a_rootName?: string): IStructParseRe
     }
     const structDef = structs.get(a_typeName);
     return structDef !== undefined ? { kind: "struct", structDef } : undefined;
-  };
+  }, typedefs);
   for (const [block, structDef] of structBlocks) {
-    structDef.fields.push(...parseFields(text, block.bodyStart, block.bodyEnd, resolve, errors));
+    structDef.fields.push(...parseFields(text, block.bodyStart, block.bodyEnd, resolve, typedefs, errors));
   }
+  checkTypedefs(typedefs, resolve, errors);
   breakCycles(structList, errors);
   errors.sort((a_left, a_right) => a_left.line - a_right.line);
 
@@ -466,6 +547,7 @@ export function parseStruct(a_text: string, a_rootName?: string): IStructParseRe
     fields: root?.fields ?? [],
     structs: structList,
     enums: Array.from(enums.values()),
+    typedefs: Array.from(typedefs.values()),
     errors
   };
 }

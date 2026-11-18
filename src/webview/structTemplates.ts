@@ -29,8 +29,10 @@ export const STRUCT_TEMPLATES: readonly IStructTemplate[] = [
   },
   {
     label: "Enum and nested structures",
-    definition: `// Enums first, then the structures using them.
+    definition: `// Typedefs and enums first, then the structures using them.
 // The last structure is decoded; pick another one in the list above the table.
+typedef uint32_t t_date;
+
 enum MsgType : uint8_t {
     MSG_PING = 1,
     MSG_PONG,
@@ -46,7 +48,7 @@ struct Header {
 
 struct Message {
     Header   header;
-    uint32_t sequence;
+    t_date   date;
     uint8_t  payload[4];
 };`
   },

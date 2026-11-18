@@ -36,6 +36,9 @@ export class CodeEditor {
         typeNames.add(struct.name);
       }
     }
+    for (const alias of a_parsed.typedefs) {
+      typeNames.add(alias.name);
+    }
     const enumerators = new Set<string>();
     for (const enumDef of a_parsed.enums) {
       typeNames.add(enumDef.name);

@@ -226,6 +226,17 @@ function collectTypeNames(a_items: readonly IItem[]): Set<string> {
     if (a_item.token.text === "}" && next?.kind === "word") {
       names.add(next.text);
     }
+    if (a_item.token.text === "typedef") {
+      // typedef <type> <alias>; : the alias is the last word before ";"
+      let end = a_index + 1;
+      while (end < a_items.length && a_items[end].token.text !== ";" && a_items[end].token.text !== "{") {
+        end++;
+      }
+      const last = a_items[end - 1]?.token;
+      if (a_items[end]?.token.text === ";" && last?.kind === "word") {
+        names.add(last.text);
+      }
+    }
   });
   return names;
 }

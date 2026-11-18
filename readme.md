@@ -39,9 +39,11 @@ The precedence is the one of C. Every intermediate result is truncated to the wo
 
 Decodes a raw buffer with a C structure definition, bitfields included. Each field is shown in decimal, hex, octal and binary.
 
-**Structure**: C declarations. Enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. A plain list of fields without braces works too. Comments are allowed.
+**Structure**: C declarations. Typedefs and enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. A plain list of fields without braces works too. Comments are allowed.
 
 ```c
+typedef uint32_t t_date;    // alias of a scalar, enum or structure type
+
 enum MsgType : uint8_t {    // underlying type, int when omitted
     MSG_PING = 1,
     MSG_PONG,               // previous + 1
@@ -59,7 +61,7 @@ struct Header {             // typedef struct { ... } Header; works too
 struct Message {
     Header   header;        // nested structure, shown as header.type, header.version...
     uint8_t  data[4];       // array
-    float    gain;
+    t_date   date;          // typedef alias
 };
 ```
 
@@ -69,7 +71,7 @@ Enumerators take a number or an expression that may use earlier enumerators (`KI
 
 The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, an enum with nested structures, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
 
-Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Pointers, unions and structures defined inside another one are not supported: declare them before.
+Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Typedefs of arrays, pointers, unions and structures defined inside another one are not supported: declare the structures before.
 
 **Buffer**: hex bytes written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`. **Offset** skips the given number of bytes before the structure.
 

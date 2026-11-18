@@ -42,6 +42,8 @@ export function buildStructHelp(): HTMLElement {
 
   const syntax = createElement("pre", "code");
   syntax.textContent = [
+    "typedef uint32_t t_date;   // alias of a scalar, enum or structure type",
+    "",
     "enum Kind : uint8_t {      // underlying type, int when omitted",
     "    KIND_A = 1,            // value: number or expression",
     "    KIND_B,                // previous + 1",
@@ -54,6 +56,7 @@ export function buildStructHelp(): HTMLElement {
     "    Kind     sub     : 4;  // enum bitfield",
     "    uint8_t          : 0;  // closes the current storage unit",
     "    uint16_t length;       // plain field",
+    "    t_date   date;         // typedef alias",
     "};",
     "",
     "struct Message {           // the last structure is decoded",
