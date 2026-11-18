@@ -82,7 +82,7 @@ The **Template…** list above the structure replaces it with a ready-made one: 
 
 Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Typedefs of arrays, pointers, unions and structures defined inside another one are not supported: declare the structures before.
 
-**Data**: the view reads from top to bottom: the declarations, the field table of the decoded structure, then the **Data of <structure>** section holding the bytes it is decoded from. They are written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`; **Offset** skips the given number of bytes before the structure.
+**Data**: the view reads from top to bottom: the declarations, the field table of the decoded structure, then the **Data of <structure>** section holding the bytes it is decoded from. They are written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`; **Offset** skips the given number of bytes before the structure. Both buffers stop at the end of the structure; bytes after it, left by a larger structure or a longer paste, are kept but not shown (the From label gives their count) and dropped as soon as the From buffer is edited.
 
 **Layout rules**: the structure is laid out as in an interface control document (ICD), in absolute terms, with no compiler rule. The message is a sequence of words whose size is chosen with **Word** in the toolbar (8, 16, 32 or 64 bits, 32 by default):
 

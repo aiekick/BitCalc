@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.23] - 2026-11-18
+
+### Fixed
+
+- Struct Decoder: the From buffer showed every byte of the buffer, including those after the structure (left by a larger structure or a longer paste), so a 5-word message could show 6.5 words in From and 5 in To. It now stops at the end of the structure like the To buffer; the bytes after it are kept but not shown, their count is given next to From, and editing the From buffer drops them.
+
 ## [0.0.22] - 2026-11-18
 
 ### Added

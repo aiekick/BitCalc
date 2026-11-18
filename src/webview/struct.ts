@@ -520,10 +520,17 @@ function renderFields(a_model: IModel): void {
 function renderConversion(a_model: IModel): void {
   dataTitle.textContent = `Data of ${a_model.name ?? "the structure"} (${a_model.size} bytes)`;
   conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}`;
-  bufferLabel.textContent = `From ${layoutName(sourceLayout())}`;
+  // The From buffer shows the bytes up to the end of the structure, as the
+  // To buffer does; bytes after it are kept but not shown, and dropped as
+  // soon as the From buffer is edited.
+  const shownLength = Math.min(a_model.allBytes.length, state.offset + a_model.size);
+  const hidden = a_model.allBytes.length - shownLength;
+  bufferLabel.textContent = `From ${layoutName(sourceLayout())}`
+    + (hidden > 0 ? ` (${hidden} byte${hidden === 1 ? "" : "s"} after the structure not shown)` : "");
+  bufferLabel.title = hidden > 0 ? "The buffer holds more bytes than the structure; editing the From buffer drops them" : "";
   targetBufferLabel.textContent = `To ${layoutName(targetLayout())}`;
   if (document.activeElement !== bufferInput) {
-    bufferInput.value = formatBuffer(a_model.allBytes, state.bufferFormat, state.endianness);
+    bufferInput.value = formatBuffer(a_model.allBytes.subarray(0, shownLength), state.bufferFormat, state.endianness);
     bufferInput.classList.remove("invalid");
     bufferInput.title = "";
   }
