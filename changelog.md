@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.32] - 2026-11-18
+
+### Added
+
+- Struct Decoder: the Fields table, the Data buffers and the Byte by byte grid are foldable sections (click their title); the folded ones are remembered with the view state.
+
 ## [0.0.31] - 2026-11-18
 
 ### Added

@@ -58,6 +58,8 @@ interface IStructState {
   /// From -> To conversion: fields keep their values, or bits keep their
   /// numbers (see ConversionMode)
   conversion: ConversionMode;
+  /// sections folded by the user: "table", "buffers", "grid"
+  folded: string[];
 }
 
 type NameMode = "path" | "name";
@@ -78,6 +80,7 @@ const state: IStructState = {
   wordBits: 32,
   nameMode: "path",
   conversion: "values",
+  folded: [],
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -93,6 +96,7 @@ state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 state.conversion = oneOf(state.conversion, ["values", "mirror"], "values");
+state.folded = Array.isArray(state.folded) ? state.folded.filter((a_name) => typeof a_name === "string") : [];
 const saveState = createStateSaver(api);
 
 const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
@@ -139,16 +143,20 @@ byId("app").innerHTML = `
       <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button><button id="copyCppComment" title="Copy the field table as a C++ comment (// lines), to paste above the structure in the code">C++ comment</button>
     </span>
   </div>
-  <div class="table-note" id="tableNote"></div>
-  <div class="table-wrap">
-    <table class="fields">
-      <thead><tr id="fieldsHead"></tr></thead>
-      <tbody id="fields"></tbody>
-    </table>
-  </div>
+  <details class="fold" data-fold="table" open>
+    <summary class="section-title">Fields</summary>
+    <div class="table-note" id="tableNote"></div>
+    <div class="table-wrap">
+      <table class="fields">
+        <thead><tr id="fieldsHead"></tr></thead>
+        <tbody id="fields"></tbody>
+      </table>
+    </div>
+  </details>
   <section class="data">
+    <details class="fold" data-fold="buffers" open>
+    <summary class="data-title" id="dataTitle"></summary>
     <div class="pane-header">
-      <h3 class="data-title" id="dataTitle"></h3>
       <label class="offset-label" title="How both buffers are shown, typed and copied; words are read in the byte order of their layout">Format
         <select id="bufferFormat">
           <option value="bytes">bytes: FA 00</option>
@@ -174,7 +182,9 @@ byId("app").innerHTML = `
       </span>
     </div>
     <textarea id="targetBuffer" spellcheck="false" rows="3" title="The data in the To layout. Edit it to rewrite the From data through the reverse conversion"></textarea>
-    <div class="section-title" id="conversionTitle"></div>
+    </details>
+    <details class="fold" data-fold="grid" open>
+    <summary class="section-title" id="conversionTitle"></summary>
     <div class="table-wrap"><table class="byte-grid" id="byteGrid"></table></div>
     <div class="byte-grid-legend">
       <span><span class="swatch changed">A0</span> byte that differs between From and To at this offset: the conversion moved or changed it</span>
@@ -182,6 +192,7 @@ byId("app").innerHTML = `
       <span><span class="swatch missing">--</span> missing in the From buffer, read as 0</span>
       <span>+n: offset of the byte in memory; a little endian word reads +3 +2 +1 +0, a big endian one +0 +1 +2 +3</span>
     </div>
+    </details>
   </section>
 `;
 
@@ -967,5 +978,14 @@ new ResizeObserver(() => {
     renderByteGrid(model);
   }
 }).observe(byteGrid.parentElement ?? byteGrid);
+// Foldable sections: Fields, Data (buffers), Byte by byte; folding is kept
+for (const fold of Array.from(document.querySelectorAll<HTMLDetailsElement>("details.fold"))) {
+  const name = fold.dataset.fold ?? "";
+  fold.open = !state.folded.includes(name);
+  fold.addEventListener("toggle", () => {
+    state.folded = state.folded.filter((a_name) => a_name !== name).concat(fold.open ? [] : [name]);
+    saveState(state);
+  });
+}
 bindPresetBar(api, state);
 api.postMessage({ type: "ready" });

@@ -175,3 +175,7 @@ textarea.invalid { border-color: var(--vscode-inputValidation-errorBorder); }
 .fields td.number { text-align: right; font-variant-numeric: tabular-nums; }
 .hl-directive { color: var(--vscode-symbolIcon-keywordForeground, #c586c0); }
 .offset-unit { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+
+details.fold { margin: 6px 0; }
+details.fold > summary { display: list-item; cursor: pointer; font-weight: bold; margin: 4px 0; list-style-position: inside; }
+details.fold > summary:hover { opacity: 1; }
