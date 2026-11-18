@@ -171,6 +171,11 @@ byId("app").innerHTML = `
     <textarea id="targetBuffer" spellcheck="false" rows="3" title="The data in the To layout. Edit it to rewrite the From data through the reverse conversion"></textarea>
     <div class="section-title" id="conversionTitle"></div>
     <div class="table-wrap"><table class="byte-grid" id="byteGrid"></table></div>
+    <div class="byte-grid-legend">
+      <span><span class="swatch changed">A0</span> byte that differs between From and To at this offset: the conversion moved or changed it</span>
+      <span><span class="swatch">45</span> same byte in both layouts</span>
+      <span><span class="swatch missing">--</span> missing in the From buffer, read as 0</span>
+    </div>
   </section>
 `;
 

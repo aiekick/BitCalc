@@ -111,6 +111,11 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .byte-grid-offsets th { font-size: 0.75em; opacity: 0.6; text-align: center; padding-top: 6px; }
 .byte-grid td.changed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .byte-grid td.missing { opacity: 0.5; }
+.byte-grid-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.9em; opacity: 0.85; margin-bottom: 6px; }
+.byte-grid-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.byte-grid-legend .swatch { font-family: var(--vscode-editor-font-family); padding: 1px 5px; border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35)); }
+.byte-grid-legend .swatch.changed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); border-color: transparent; }
+.byte-grid-legend .swatch.missing { opacity: 0.5; }
 .summary-line { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .summary-line .summary { margin: 0; }
 select[hidden] { display: none; }

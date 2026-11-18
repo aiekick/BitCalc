@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.29] - 2026-11-18
+
+### Added
+
+- Struct Decoder: legend under the Byte by byte grid: highlighted byte = differs between From and To at that offset, plain byte = same in both layouts, `--` = missing in the From buffer, read as 0.
+
 ## [0.0.28] - 2026-11-18
 
 ### Changed
