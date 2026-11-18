@@ -79,6 +79,6 @@ struct C { uint8_t a; uint32_t b; };`;
   test("the formatter keeps directives on their own line", () => {
     const result = formatDeclarations("#pragma pack(push, 1)\nstruct S{uint8_t a;uint32_t b;};\n#pragma pack(pop)");
     assert.equal(result.error, undefined);
-    assert.equal(result.text, "#pragma pack(push, 1)\nstruct S {\n    uint8_t  a;\n    uint32_t b;\n};\n\n#pragma pack(pop)\n");
+    assert.equal(result.text, "#pragma pack(push, 1)\nstruct S {\n    uint8_t  a;\n    uint32_t b;\n}\n\n#pragma pack(pop)\n");
   });
 });

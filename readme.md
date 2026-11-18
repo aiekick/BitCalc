@@ -48,30 +48,30 @@ The precedence is the one of C. Every intermediate result is truncated to the wo
 
 Decodes a raw buffer with a C structure definition, bitfields included. Each field is shown in decimal, hex, octal and binary.
 
-**Structure**: C declarations. Typedefs and enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. A plain list of fields without braces works too. Comments are allowed.
+**Structure**: C declarations. Typedefs and enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. A plain list of fields without braces works too. Comments are allowed. The `;` after the `}` of a structure or an enum is optional (Format drops it); fields and typedefs still end with `;`.
 
 ```c
-typedef uint32_t t_date;    // alias of a scalar, enum or structure type
+typedef uint32 t_date;      // alias of a scalar, enum or structure type
 
-enum MsgType : uint8_t {    // underlying type, int when omitted
+enum MsgType : uint8 {      // underlying type, int when omitted
     MSG_PING = 1,
     MSG_PONG,               // previous + 1
     MSG_DATA = 0x10
-};
+}
 
-struct Header {             // typedef struct { ... } Header; works too
+struct Header {             // typedef struct { ... } Header works too
     MsgType  type;          // enum field
-    uint8_t  version : 4;   // bitfield
-    uint8_t          : 2;   // anonymous padding bits
-    uint8_t  flags   : 2;
-    uint16_t length;        // plain field
-};
+    uint8    version : 4;   // bitfield
+    uint8            : 2;   // anonymous padding bits
+    uint8    flags   : 2;
+    uint16   length;        // plain field
+}
 
 struct Message {
     Header   header;        // nested structure, shown as header.type, header.version...
-    uint8_t  data[4];       // array
+    uint8    data[4];       // array
     t_date   date;          // typedef alias
-};
+}
 ```
 
 The declarations are coloured as you type, and the lines with an error are underlined. **Format** (or `Shift+Alt+F` in the structure) indents them and aligns the types, names, bit widths, enumerator values and trailing comments in columns; `Ctrl+Z` undoes it. Text that cannot be formatted without changing it, such as a missing `}`, is left as is.
@@ -80,7 +80,7 @@ Enumerators take a number or an expression that may use earlier enumerators (`KI
 
 The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, an enum with nested structures, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
 
-Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Typedefs of arrays, pointers, unions and structures defined inside another one are not supported: declare the structures before.
+Types are a kind and a size: `uint8`, `uint16`, `uint32`, `uint64`, `int8` to `int64`, `bool` (8 bits), `float` or `float32`, `double` or `float64`. The C names are read too, so a header can be pasted as is: `uint32_t`, `u32`, `i32`, `char`, `unsigned char`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms. `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Typedefs of arrays, pointers, unions and structures defined inside another one are not supported: declare the structures before.
 
 **Data**: the view reads from top to bottom: the declarations, the field table of the decoded structure, then the **Data of <structure>** section holding the bytes it is decoded from. They are written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`; **Offset** skips the given number of bytes before the structure. Both buffers stop at the end of the structure; bytes after it, left by a larger structure or a longer paste, are kept but not shown (the From label gives their count) and dropped as soon as the From buffer is edited.
 

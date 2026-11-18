@@ -28,3 +28,16 @@ test("the IPv4 template decodes a real header with its own options", () => {
   assert.equal(byName.get("protocol"), 1n);
   assert.equal(byName.get("destination[3]"), 199n);
 });
+
+test("the help lists known types and the templates use the short names", async () => {
+  const { HELP_TYPES } = await import("../src/webview/structHelp");
+  const { SCALAR_TYPES } = await import("../src/utils/structDef");
+  for (const row of HELP_TYPES) {
+    for (const name of row.names) {
+      assert.ok(SCALAR_TYPES.has(name), name);
+    }
+  }
+  for (const template of STRUCT_TEMPLATES) {
+    assert.doesNotMatch(template.definition, /\bu?int\d+_t\b/, template.label);
+  }
+});

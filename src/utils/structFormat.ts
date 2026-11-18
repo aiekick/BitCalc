@@ -247,11 +247,14 @@ function collectTypeNames(a_items: readonly IItem[]): Set<string> {
 }
 
 /// What must survive formatting: the code tokens (ignoring the separators a
-/// formatter may add or drop before "}") and the comments.
+/// formatter may add or drop before "}", and the ";" ending a structure or
+/// an enum) and the comments.
 function signature(a_text: string): string {
   const tokens = lexC(a_text).filter((a_token) => a_token.kind !== "space");
   const code = tokens.filter((a_token) => !isAside(a_token)).map((a_token) => a_token.text);
-  const kept = code.filter((a_text_, a_index) => !((a_text_ === "," || a_text_ === ";") && (code[a_index + 1] === "}" || a_index === code.length - 1)));
+  const kept = code.filter((a_text_, a_index) =>
+    !((a_text_ === "," || a_text_ === ";") && (code[a_index + 1] === "}" || a_index === code.length - 1))
+    && !(a_text_ === ";" && (code[a_index - 1] === "}" || (code[a_index - 2] === "}" && /^\w+$/.test(code[a_index - 1] ?? "")))));
   const comments = tokens
     .filter(isAside)
     .map((a_token) => a_token.text.replace(/\s+/g, ""))
@@ -319,14 +322,14 @@ export function formatDeclarations(a_text: string, a_indent = "    "): IFormatRe
         index++;
       }
       index++;
-      // Trailer: typedef name up to ";"
+      // Trailer: the name of a typedef, then an optional ";", which the
+      // declarations do not need and the formatter drops
       const trailer: IItem[] = [];
-      while (index < items.length && items[index].token.text !== ";" && !isAside(items[index].token)) {
+      if (header.some((a_item) => a_item.token.text === "typedef") && items[index]?.token.kind === "word") {
         trailer.push(items[index]);
         index++;
       }
-      const hasSemicolon = index < items.length && items[index].token.text === ";";
-      if (hasSemicolon) {
+      if (index < items.length && items[index].token.text === ";") {
         index++;
       }
       if (!attached) {
@@ -339,7 +342,7 @@ export function formatDeclarations(a_text: string, a_indent = "    "): IFormatRe
       } else {
         formatStructBody(body, a_indent, typeNames, lines);
       }
-      lines.push(`}${trailer.length > 0 ? ` ${joinCode(trailer)}` : ""}${hasSemicolon ? ";" : ""}`);
+      lines.push(`}${trailer.length > 0 ? ` ${joinCode(trailer)}` : ""}`);
       separate();
     }
   }

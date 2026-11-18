@@ -432,10 +432,12 @@ function scanBlocks(a_text: string, a_pre: IPreprocessed, a_typedefs: Map<string
       a_errors.push({ line: lineAt(a_text, a_text.length), message: 'Missing "}"' });
       close = a_text.length;
     }
-    const semicolon = a_text.indexOf(";", close);
-    const trailerEnd = semicolon < 0 ? a_text.length : semicolon;
-    const trailerName = /^\s*([A-Za-z_]\w*)/.exec(a_text.slice(close + 1, trailerEnd))?.[1];
-    cursor = trailerEnd + 1;
+    // The ";" after "}" is optional: the declarations are read as a
+    // description, not as C. After a typedef, the name may follow "}".
+    const trailer = (/^typedef\b/.test(header) ? /^\s*([A-Za-z_]\w*)?\s*;?/ : /^\s*;?/).exec(a_text.slice(close + 1));
+    const trailerName = trailer?.[1];
+    const trailerEnd = close + 1 + (trailer?.[0].length ?? 0);
+    cursor = trailerEnd;
     const packed = a_pre.packedMarks.some((a_mark) => (a_mark >= headerStart && a_mark < open) || (a_mark > close && a_mark <= trailerEnd));
     const pack = packed ? 1 : a_pre.packAt(open);
 

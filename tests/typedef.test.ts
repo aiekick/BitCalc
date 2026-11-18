@@ -45,6 +45,6 @@ describe("typedef aliases", () => {
   test("the formatter knows aliases for anonymous bitfields", () => {
     const result = formatDeclarations("typedef uint32 t_date;\nstruct S{t_date a:3;t_date :5;};");
     assert.equal(result.error, undefined);
-    assert.equal(result.text, "typedef uint32 t_date;\n\nstruct S {\n    t_date a : 3;\n    t_date   : 5;\n};\n");
+    assert.equal(result.text, "typedef uint32 t_date;\n\nstruct S {\n    t_date a : 3;\n    t_date   : 5;\n}\n");
   });
 });

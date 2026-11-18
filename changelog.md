@@ -4,6 +4,13 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.25] - 2026-11-18
+
+### Changed
+
+- Templates, help and readme use the short type names, a kind and a size: `uint8` to `uint64`, `int8` to `int64`, `bool`, `float` / `float32`, `double` / `float64`. The help type table lists only those; the C names (`uint32_t`, `int`, `short`...) are still read, so a header can be pasted as is.
+- The `;` after the `}` of a structure or an enum is optional: the declarations parse the same with or without it, and **Format** drops it. Templates, help and readme are written without it.
+
 ## [0.0.24] - 2026-11-18
 
 ### Added

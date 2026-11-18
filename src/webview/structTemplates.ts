@@ -13,44 +13,44 @@ export const STRUCT_TEMPLATES: readonly IStructTemplate[] = [
   {
     label: "Empty structure",
     definition: `struct Name {
-    uint32_t field;
-};`
+    uint32 field;
+}`
   },
   {
     label: "Bitfields example",
     definition: `struct Header {
-    uint8_t  version : 4;
-    uint8_t  length  : 4;
-    uint8_t          : 3;   // reserved
-    uint8_t  flags   : 5;
-    uint16_t id;
-    float    gain;
-};`
+    uint8  version : 4;
+    uint8  length  : 4;
+    uint8          : 3; // reserved
+    uint8  flags   : 5;
+    uint16 id;
+    float  gain;
+}`
   },
   {
     label: "Enum and nested structures",
     definition: `// Typedefs and enums first, then the structures using them.
 // The last structure is decoded; pick another one in the list above the table.
-typedef uint32_t t_date;
+typedef uint32 t_date;
 
-enum MsgType : uint8_t {
+enum MsgType : uint8 {
     MSG_PING = 1,
     MSG_PONG,
     MSG_DATA = 0x10
-};
+}
 
 struct Header {
-    MsgType  type;
-    uint8_t  version : 4;
-    uint8_t  flags   : 4;
-    uint16_t length;
-};
+    MsgType type;
+    uint8   version : 4;
+    uint8   flags   : 4;
+    uint16  length;
+}
 
 struct Message {
-    Header   header;
-    t_date   date;
-    uint8_t  payload[4];
-};`
+    Header header;
+    t_date date;
+    uint8  payload[4];
+}`
   },
   {
     label: "IPv4 header (BE, MSB0)",
@@ -58,59 +58,59 @@ struct Message {
     bitOrder: "msb0",
     definition: `// Network byte order: big endian, bitfields from the MSB
 struct Ipv4Header {
-    uint8_t  version         : 4;
-    uint8_t  ihl             : 4;
-    uint8_t  dscp            : 6;
-    uint8_t  ecn             : 2;
-    uint16_t total_length;
-    uint16_t identification;
-    uint16_t flags           : 3;
-    uint16_t fragment_offset : 13;
-    uint8_t  ttl;
-    uint8_t  protocol;
-    uint16_t checksum;
-    uint8_t  source[4];
-    uint8_t  destination[4];
-};`
+    uint8  version         : 4;
+    uint8  ihl             : 4;
+    uint8  dscp            : 6;
+    uint8  ecn             : 2;
+    uint16 total_length;
+    uint16 identification;
+    uint16 flags           : 3;
+    uint16 fragment_offset : 13;
+    uint8  ttl;
+    uint8  protocol;
+    uint16 checksum;
+    uint8  source[4];
+    uint8  destination[4];
+}`
   },
   {
     label: "UDP header (BE)",
     endianness: "big",
     definition: `// Network byte order: big endian
 struct UdpHeader {
-    uint16_t source_port;
-    uint16_t destination_port;
-    uint16_t length;
-    uint16_t checksum;
-};`
+    uint16 source_port;
+    uint16 destination_port;
+    uint16 length;
+    uint16 checksum;
+}`
   },
   {
     label: "RGB565 pixel (LSB0)",
     bitOrder: "lsb0",
     definition: `struct Rgb565 {
-    uint16_t blue  : 5;
-    uint16_t green : 6;
-    uint16_t red   : 5;
-};`
+    uint16 blue  : 5;
+    uint16 green : 6;
+    uint16 red   : 5;
+}`
   },
   {
     label: "IEEE 754 float bits (LSB0)",
     bitOrder: "lsb0",
     definition: `// Single precision float split in its fields
 struct Float32Bits {
-    uint32_t mantissa : 23;
-    uint32_t exponent : 8;
-    uint32_t sign     : 1;
-};`
+    uint32 mantissa : 23;
+    uint32 exponent : 8;
+    uint32 sign     : 1;
+}`
   },
   {
     label: "IEEE 754 double bits (LSB0)",
     bitOrder: "lsb0",
     definition: `// Double precision float split in its fields
 struct Float64Bits {
-    uint64_t mantissa : 52;
-    uint64_t exponent : 11;
-    uint64_t sign     : 1;
-};`
+    uint64 mantissa : 52;
+    uint64 exponent : 11;
+    uint64 sign     : 1;
+}`
   }
 ];
