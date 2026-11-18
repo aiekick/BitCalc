@@ -64,8 +64,8 @@ function buildScalarTypes(): Map<string, IScalarType> {
     [["long long", "long long int", "signed long long", "signed long long int"], integer(8, true)],
     [["unsigned long long", "unsigned long long int"], integer(8, false)],
     [["bool", "_Bool"], { size: 1, signed: false, kind: "bool" }],
-    [["float", "f32"], { size: 4, signed: true, kind: "float" }],
-    [["double", "f64"], { size: 8, signed: true, kind: "float" }]
+    [["float", "f32", "float32"], { size: 4, signed: true, kind: "float" }],
+    [["double", "f64", "float64"], { size: 8, signed: true, kind: "float" }]
   ];
   for (const [names, type] of aliases) {
     for (const name of names) {

@@ -1,7 +1,8 @@
 import { BitOrder, Endianness, formatBits, groupDigits } from "../utils/bits";
-import { parseHexBytes } from "../utils/hexBytes";
-import { parseStruct } from "../utils/structDef";
-import { IDecodedField, decodeStruct, fieldValue } from "../utils/structDecode";
+import { parseFieldInput } from "../utils/fieldInput";
+import { formatCArray, formatHexBytes, parseHexBytes } from "../utils/hexBytes";
+import { IFieldDef, parseStruct } from "../utils/structDef";
+import { IDecodedField, ILayoutOptions, decodeStruct, encodeStruct, fieldValue, writeSlot } from "../utils/structDecode";
 import { buildStructHelp } from "./structHelp";
 import { STRUCT_TEMPLATES } from "./structTemplates";
 import {
@@ -20,11 +21,16 @@ interface IStructState {
   definition: string;
   buffer: string;
   offset: number;
+  /// layout the buffer is written in ("From")
   endianness: Endianness;
   bitOrder: BitOrder;
+  /// layout the structure is converted to ("To")
+  targetEndianness: Endianness;
+  targetBitOrder: BitOrder;
 }
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
+const BYTES_PER_GRID_ROW = 16;
 
 const api = getVsCodeApi<IStructState>();
 const config = readInitialConfig();
@@ -34,6 +40,8 @@ const state: IStructState = {
   offset: 0,
   endianness: config.endianness,
   bitOrder: config.bitOrder,
+  targetEndianness: config.endianness === "little" ? "big" : "little",
+  targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
   ...readSavedState<IStructState>(),
   ...api.getState()
 };
@@ -42,16 +50,22 @@ state.buffer = typeof state.buffer === "string" ? state.buffer : "";
 state.offset = Number.isInteger(state.offset) && state.offset >= 0 ? state.offset : 0;
 state.endianness = oneOf(state.endianness, ["little", "big"], "little");
 state.bitOrder = oneOf(state.bitOrder, ["lsb0", "msb0"], "lsb0");
+state.targetEndianness = oneOf(state.targetEndianness, ["little", "big"], "big");
+state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
 const saveState = createStateSaver(api);
+
+const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
+const BIT_ORDER_BUTTONS = `<button data-value="lsb0">LSB0</button><button data-value="msb0">MSB0</button>`;
 
 byId("app").innerHTML = `
   <div class="toolbar">
-    <div class="segmented" id="endianness" title="Byte order of the fields">
-      <button data-value="little">LE</button><button data-value="big">BE</button>
-    </div>
-    <div class="segmented" id="bitOrder" title="Bitfields are allocated from bit 0: the LSB (LSB0) or the MSB (MSB0) of their storage unit">
-      <button data-value="lsb0">LSB0</button><button data-value="msb0">MSB0</button>
-    </div>
+    <span class="layout-label" title="Layout the buffer is written in">From</span>
+    <div class="segmented" id="endianness" title="Byte order of the buffer">${ENDIANNESS_BUTTONS}</div>
+    <div class="segmented" id="bitOrder" title="Bitfield allocation of the buffer: from the LSB (LSB0) or the MSB (MSB0) of their storage unit">${BIT_ORDER_BUTTONS}</div>
+    <button id="swapLayouts" title="Swap From and To: the buffer is replaced by its conversion, the values stay the same">⇄</button>
+    <span class="layout-label" title="Layout the structure is converted to">To</span>
+    <div class="segmented" id="targetEndianness" title="Byte order of the conversion">${ENDIANNESS_BUTTONS}</div>
+    <div class="segmented" id="targetBitOrder" title="Bitfield allocation of the conversion">${BIT_ORDER_BUTTONS}</div>
     <label title="Number of buffer bytes skipped before the structure">Offset <input type="number" id="offset" min="0" class="offset"></label>
   </div>
   <div class="split">
@@ -76,10 +90,24 @@ byId("app").innerHTML = `
   <div class="table-wrap">
     <table class="fields">
       <thead><tr>
-        <th>Offset</th><th>Bits</th><th>Field</th><th>Type</th><th>DEC</th><th>HEX</th><th>OCT</th><th>BIN</th>
+        <th>Offset</th><th>Bits</th><th>Field</th><th>Type</th>
+        <th title="Type a value or an expression (0x1F, -1, 1 << 3) and press Enter: both buffers are updated">DEC ✎</th>
+        <th>HEX</th><th>OCT</th><th>BIN</th>
       </tr></thead>
       <tbody id="fields"></tbody>
     </table>
+  </div>
+  <div class="conversion">
+    <div class="pane-header">
+      <span class="section-title" id="conversionTitle"></span>
+      <span class="copy-group">
+        <span>From</span>
+        <button data-copy="from-hex">Hex</button><button data-copy="from-c">C array</button>
+        <span>To</span>
+        <button data-copy="to-hex">Hex</button><button data-copy="to-c">C array</button>
+      </span>
+    </div>
+    <div class="table-wrap"><table class="byte-grid" id="byteGrid"></table></div>
   </div>
 `;
 
@@ -89,6 +117,61 @@ const offsetInput = byId<HTMLInputElement>("offset");
 const messages = byId("messages");
 const summary = byId("summary");
 const fieldsBody = byId("fields");
+const conversionTitle = byId("conversionTitle");
+const byteGrid = byId("byteGrid");
+
+function sourceLayout(): ILayoutOptions {
+  return { endianness: state.endianness, bitOrder: state.bitOrder };
+}
+
+function targetLayout(): ILayoutOptions {
+  return { endianness: state.targetEndianness, bitOrder: state.targetBitOrder };
+}
+
+function layoutName(a_layout: ILayoutOptions): string {
+  return `${a_layout.endianness === "little" ? "LE" : "BE"} ${a_layout.bitOrder.toUpperCase()}`;
+}
+
+/// Everything the view shows, computed from the state.
+interface IModel {
+  readonly fields: IFieldDef[];
+  readonly allBytes: Uint8Array;
+  /// buffer bytes after the offset
+  readonly bytes: Uint8Array;
+  readonly decoded: IDecodedField[];
+  readonly size: number;
+  /// the structure stored in the target layout
+  readonly converted: Uint8Array;
+}
+
+let model: IModel | undefined;
+
+function computeModel(): IModel {
+  messages.replaceChildren();
+  const parsed = parseStruct(state.definition);
+  for (const error of parsed.errors) {
+    addMessage(`Structure, line ${error.line}: ${error.message}`);
+  }
+  const buffer = parseHexBytes(state.buffer);
+  if (buffer.error !== undefined) {
+    addMessage(`Buffer: ${buffer.error}`);
+  }
+  const bytes = buffer.bytes.subarray(Math.min(state.offset, buffer.bytes.length));
+  const decoded = decodeStruct(parsed.fields, bytes, sourceLayout());
+  summary.textContent = `${parsed.name !== undefined ? `${parsed.name}: ` : ""}${decoded.size} bytes, buffer: ${bytes.length} bytes`
+    + (state.offset > 0 ? ` after offset ${state.offset}` : "")
+    + (bytes.length < decoded.size ? `, ${decoded.size - bytes.length} missing (read as 0 in the conversion)` : "")
+    + (bytes.length > decoded.size ? `, ${bytes.length - decoded.size} unused` : "");
+  summary.classList.toggle("warning", bytes.length < decoded.size);
+  return {
+    fields: parsed.fields,
+    allBytes: buffer.bytes,
+    bytes,
+    decoded: decoded.fields,
+    size: decoded.size,
+    converted: encodeStruct(decoded.fields, decoded.size, targetLayout())
+  };
+}
 
 function offsetText(a_field: IDecodedField): string {
   return a_field.bitOffset === undefined ? `+${a_field.byteOffset}` : `+${a_field.byteOffset}.${a_field.bitOffset}`;
@@ -103,57 +186,114 @@ function bitsText(a_field: IDecodedField): string {
   return `${a_field.bitWidth} [${range}]`;
 }
 
-function valueCells(a_field: IDecodedField): string[] {
-  const value = fieldValue(a_field);
-  if (a_field.raw === undefined || value === undefined) {
-    return ["—", "—", "—", "—"];
-  }
-  return [
-    String(value),
-    formatBits(a_field.raw, a_field.bitWidth, 16, true),
-    formatBits(a_field.raw, a_field.bitWidth, 8, false),
-    groupDigits(formatBits(a_field.raw, a_field.bitWidth, 2, true), 4)
-  ];
-}
-
 function addMessage(a_text: string): void {
   messages.append(createElement("li", undefined, a_text));
 }
 
-function update(): void {
-  messages.replaceChildren();
+/// Write a new value of a_field in the buffer (source layout), growing the
+/// buffer to the structure size when it is too short.
+function writeField(a_field: IDecodedField, a_raw: bigint): void {
+  if (model === undefined) {
+    return;
+  }
+  const required = state.offset + model.size;
+  const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
+  bytes.set(model.allBytes);
+  writeSlot(a_field, a_raw, bytes.subarray(state.offset, required), sourceLayout());
+  state.buffer = formatHexBytes(bytes);
+  bufferInput.value = state.buffer;
+  update();
+}
+
+function valueInput(a_field: IDecodedField): HTMLInputElement {
+  const input = createElement("input", "value-input");
+  const value = fieldValue(a_field);
+  input.value = value === undefined ? "" : String(value);
+  input.placeholder = "—";
+  input.spellcheck = false;
+  input.title = "Type a value or an expression and press Enter";
+  const commit = (): void => {
+    if (input.value === (value === undefined ? "" : String(value))) {
+      return;
+    }
+    try {
+      writeField(a_field, parseFieldInput(a_field, input.value));
+    } catch (a_error) {
+      input.classList.add("invalid");
+      input.title = a_error instanceof Error ? a_error.message : String(a_error);
+    }
+  };
+  input.addEventListener("change", commit);
+  input.addEventListener("keydown", (a_event) => {
+    if (a_event.key === "Enter") {
+      commit();
+    } else if (a_event.key === "Escape") {
+      input.value = value === undefined ? "" : String(value);
+      input.classList.remove("invalid");
+    }
+  });
+  return input;
+}
+
+function renderFields(a_model: IModel): void {
   fieldsBody.replaceChildren();
-
-  const parsed = parseStruct(state.definition);
-  for (const error of parsed.errors) {
-    addMessage(`Structure, line ${error.line}: ${error.message}`);
-  }
-  const buffer = parseHexBytes(state.buffer);
-  if (buffer.error !== undefined) {
-    addMessage(`Buffer: ${buffer.error}`);
-  }
-  const bytes = buffer.bytes.subarray(Math.min(state.offset, buffer.bytes.length));
-  const decoded = decodeStruct(parsed.fields, bytes, { endianness: state.endianness, bitOrder: state.bitOrder });
-
-  const structName = parsed.name !== undefined ? `${parsed.name}: ` : "";
-  summary.textContent = `${structName}${decoded.size} bytes, buffer: ${bytes.length} bytes`
-    + (state.offset > 0 ? ` after offset ${state.offset}` : "")
-    + (bytes.length < decoded.size ? `, ${decoded.size - bytes.length} missing` : "")
-    + (bytes.length > decoded.size ? `, ${bytes.length - decoded.size} unused` : "");
-  summary.classList.toggle("warning", bytes.length < decoded.size);
-
-  for (const field of decoded.fields) {
+  for (const field of a_model.decoded) {
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
     if (field.raw === undefined) {
       row.classList.add("missing");
       row.title = "The buffer is too short for this field";
     }
-    const cells = [offsetText(field), bitsText(field), field.name ?? "(padding)", field.typeName, ...valueCells(field)];
-    cells.forEach((a_text, a_index) => {
-      row.append(createElement("td", a_index >= 4 ? "value" : undefined, a_text));
-    });
+    for (const text of [offsetText(field), bitsText(field), field.name ?? "(padding)", field.typeName]) {
+      row.append(createElement("td", undefined, text));
+    }
+    const valueCell = createElement("td", "value");
+    valueCell.append(valueInput(field));
+    row.append(valueCell);
+    const raw = field.raw;
+    const cells = raw === undefined
+      ? ["—", "—", "—"]
+      : [
+        formatBits(raw, field.bitWidth, 16, true),
+        formatBits(raw, field.bitWidth, 8, false),
+        groupDigits(formatBits(raw, field.bitWidth, 2, true), 4)
+      ];
+    for (const text of cells) {
+      row.append(createElement("td", "value", text));
+    }
     fieldsBody.append(row);
   }
+}
+
+function renderConversion(a_model: IModel): void {
+  conversionTitle.textContent = `Bytes: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}`;
+  byteGrid.replaceChildren();
+  for (let start = 0; start < a_model.size; start += BYTES_PER_GRID_ROW) {
+    const end = Math.min(start + BYTES_PER_GRID_ROW, a_model.size);
+    const header = createElement("tr", "byte-grid-offsets");
+    const fromRow = createElement("tr");
+    const toRow = createElement("tr");
+    header.append(createElement("th"));
+    fromRow.append(createElement("th", undefined, "From"));
+    toRow.append(createElement("th", undefined, "To"));
+    for (let index = start; index < end; index++) {
+      header.append(createElement("th", undefined, `+${index}`));
+      const fromByte = index < a_model.bytes.length ? a_model.bytes[index] : undefined;
+      const toByte = a_model.converted[index];
+      fromRow.append(createElement("td", fromByte === undefined ? "missing" : undefined, fromByte === undefined ? "--" : hex2(fromByte)));
+      toRow.append(createElement("td", toByte !== fromByte ? "changed" : undefined, hex2(toByte)));
+    }
+    byteGrid.append(header, fromRow, toRow);
+  }
+}
+
+function hex2(a_byte: number): string {
+  return a_byte.toString(16).toUpperCase().padStart(2, "0");
+}
+
+function update(): void {
+  model = computeModel();
+  renderFields(model);
+  renderConversion(model);
   saveState(state);
 }
 
@@ -178,6 +318,43 @@ const showBitOrder = bindSegmented<BitOrder>(byId("bitOrder"), (a_order) => {
   state.bitOrder = a_order;
   update();
 });
+const showTargetEndianness = bindSegmented<Endianness>(byId("targetEndianness"), (a_endianness) => {
+  state.targetEndianness = a_endianness;
+  update();
+});
+const showTargetBitOrder = bindSegmented<BitOrder>(byId("targetBitOrder"), (a_order) => {
+  state.targetBitOrder = a_order;
+  update();
+});
+
+/// Swap the two layouts and replace the structure bytes of the buffer by
+/// their conversion, so that the decoded values do not change.
+byId("swapLayouts").addEventListener("click", () => {
+  if (model === undefined) {
+    return;
+  }
+  const required = state.offset + model.size;
+  const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
+  bytes.set(model.allBytes);
+  bytes.set(model.converted, state.offset);
+  state.buffer = formatHexBytes(bytes);
+  bufferInput.value = state.buffer;
+  [state.endianness, state.targetEndianness] = [state.targetEndianness, state.endianness];
+  [state.bitOrder, state.targetBitOrder] = [state.targetBitOrder, state.bitOrder];
+  showLayouts();
+  update();
+});
+
+for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-copy]"))) {
+  button.addEventListener("click", () => {
+    if (model === undefined) {
+      return;
+    }
+    const [which, format] = (button.dataset.copy ?? "").split("-");
+    const bytes = which === "to" ? model.converted : model.bytes.subarray(0, model.size);
+    api.postMessage({ type: "copy", text: format === "c" ? formatCArray(bytes) : formatHexBytes(bytes) });
+  });
+}
 
 /// Replace the whole definition through the editing commands of the page, so
 /// that Ctrl+Z in the text area brings the previous definition back.
@@ -194,7 +371,7 @@ function replaceDefinition(a_text: string): void {
 
 const helpBox = buildStructHelp();
 helpBox.hidden = true;
-byId("messages").before(helpBox);
+messages.before(helpBox);
 const helpToggle = byId("helpToggle");
 helpToggle.addEventListener("click", () => {
   helpBox.hidden = !helpBox.hidden;
@@ -210,14 +387,9 @@ templateSelect.addEventListener("change", () => {
     return;
   }
   replaceDefinition(template.definition);
-  if (template.endianness !== undefined) {
-    state.endianness = template.endianness;
-    showEndianness(template.endianness);
-  }
-  if (template.bitOrder !== undefined) {
-    state.bitOrder = template.bitOrder;
-    showBitOrder(template.bitOrder);
-  }
+  state.endianness = template.endianness ?? state.endianness;
+  state.bitOrder = template.bitOrder ?? state.bitOrder;
+  showLayouts();
   update();
 });
 
@@ -235,10 +407,16 @@ onHostMessage((a_message) => {
   update();
 });
 
+function showLayouts(): void {
+  showEndianness(state.endianness);
+  showBitOrder(state.bitOrder);
+  showTargetEndianness(state.targetEndianness);
+  showTargetBitOrder(state.targetBitOrder);
+}
+
 definitionInput.value = state.definition;
 bufferInput.value = state.buffer;
 offsetInput.value = String(state.offset);
-showEndianness(state.endianness);
-showBitOrder(state.bitOrder);
+showLayouts();
 update();
 api.postMessage({ type: "ready" });

@@ -85,3 +85,9 @@ describe("decodeStruct", () => {
     assert.deepEqual(values("uint8_t d[3];", [1, 2]), [["d[0]", 1n], ["d[1]", 2n], ["d[2]", undefined]]);
   });
 });
+
+test("types without _t", () => {
+  const parsed = parseStruct("uint8 a; int8 b; uint16 c; int16 d; uint32 e; int32 f; uint64 g; int64 h; float i; double j; float32 k; float64 l; u8 m : 3;");
+  assert.deepEqual(parsed.errors, []);
+  assert.deepEqual(parsed.fields.map((a_field) => a_field.type.size), [1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 4, 8, 1]);
+});

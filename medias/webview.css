@@ -97,3 +97,14 @@ textarea { width: 100%; box-sizing: border-box; resize: vertical; }
 .help .code { font-family: var(--vscode-editor-font-family); }
 .help-types td { padding: 1px 12px 1px 0; vertical-align: top; }
 .help-types td:first-child { white-space: nowrap; opacity: 0.8; }
+.layout-label { font-weight: bold; opacity: 0.8; }
+.value-input { width: 100%; min-width: 7em; box-sizing: border-box; font-family: var(--vscode-editor-font-family); }
+.conversion { margin-top: 12px; }
+.copy-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-left: auto; }
+.copy-group span { opacity: 0.8; margin-left: 6px; }
+.byte-grid { border-collapse: collapse; font-family: var(--vscode-editor-font-family); margin-bottom: 6px; }
+.byte-grid th, .byte-grid td { padding: 1px 5px; text-align: center; }
+.byte-grid th { font-weight: normal; opacity: 0.7; text-align: left; }
+.byte-grid-offsets th { font-size: 0.75em; opacity: 0.6; text-align: center; padding-top: 6px; }
+.byte-grid td.changed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.byte-grid td.missing { opacity: 0.5; }

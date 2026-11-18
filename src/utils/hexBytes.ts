@@ -32,3 +32,16 @@ export function parseHexBytes(a_text: string): IHexBytesResult {
 export function formatHexBytes(a_bytes: ArrayLike<number>): string {
   return Array.from(a_bytes, (a_byte) => a_byte.toString(16).toUpperCase().padStart(2, "0")).join(" ");
 }
+
+/// C initializer of a byte array: { 0x01, 0x02 }, 16 bytes per line.
+export function formatCArray(a_bytes: ArrayLike<number>): string {
+  const items = Array.from(a_bytes, (a_byte) => `0x${a_byte.toString(16).toUpperCase().padStart(2, "0")}`);
+  if (items.length <= 16) {
+    return `{ ${items.join(", ")} }`;
+  }
+  const lines: string[] = [];
+  for (let start = 0; start < items.length; start += 16) {
+    lines.push(`    ${items.slice(start, start + 16).join(", ")}`);
+  }
+  return `{\n${lines.join(",\n")}\n}`;
+}

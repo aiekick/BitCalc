@@ -54,7 +54,7 @@ struct Header {
 
 The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
 
-Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Pointers, nested structures and unions are not supported.
+Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Pointers, nested structures and unions are not supported.
 
 **Buffer**: hex bytes written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`. **Offset** skips the given number of bytes before the structure.
 
@@ -65,7 +65,19 @@ Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `ui
 - Consecutive bitfields share a storage unit of the size of their declared type while they fit in it. A bitfield of another type size, a bitfield that does not fit, a plain field or a `: 0` bitfield starts a new unit. This is what MSVC does; GCC and Clang can also mix types in one unit.
 - The storage unit is read with the chosen byte order, then the bitfields are allocated from its bit 0: the least significant bit in **LSB0**, the most significant one in **MSB0**.
 
-Each row shows the offset (`+byte` for a plain field, `+byte.bit` for a bitfield, the bit being numbered in the chosen bit order inside its unit), the width in bits with the bit range, and the value. Signed fields are sign extended. Fields the buffer is too short for show `—`.
+Each row shows the offset (`+byte` for a plain field, `+byte.bit` for a bitfield, the bit being numbered in the chosen bit order inside its unit), the width in bits with the bit range, and the value. Signed fields are sign extended. Fields the buffer is too short for are empty.
+
+### Converting between layouts
+
+The toolbar has two layouts: **From**, the byte order and bit numbering the buffer is written in, and **To**, the layout to convert it to. For instance, a structure written by a little endian compiler that allocates bitfields from the LSB (**From** LE LSB0) and expected by a big endian target that allocates them from the MSB (**To** BE MSB0).
+
+The fields keep the same values in both layouts; only the bytes change. Under the field table, **Bytes** shows the buffer (**From**) and the same structure stored in the other layout (**To**), byte by byte, with the bytes that differ highlighted. The **Hex** and **C array** buttons copy either one, as `5A F4 34 12` or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
+
+**⇄** swaps the two layouts and replaces the buffer by its conversion, so the values stay the same.
+
+### Editing values
+
+The **DEC** column can be edited: type a value and press `Enter`, the buffer and its conversion are updated. Integer fields accept the calculator expressions (`0x1F`, `-1`, `1 << 3`) and are truncated to the field width, `bool` fields accept `true`, `false`, `1` or `0`, `float` and `double` fields accept any number. `Escape` cancels. When the buffer is shorter than the structure, it is completed with zeros. Starting from an empty buffer, this builds the bytes of a structure field by field.
 
 ## From the editor
 
@@ -85,8 +97,8 @@ These settings are only the starting values. Everything can be changed in the vi
 |---|---|---|
 | `bitcalc.wordSize` | `64` | Word size of the calculator: 8, 16, 32, 64 or 128 |
 | `bitcalc.signed` | `true` | Signed (two's complement) mode of the calculator |
-| `bitcalc.endianness` | `little` | Byte order: `little` or `big` |
-| `bitcalc.bitOrder` | `lsb0` | Bit numbering: `lsb0` or `msb0` |
+| `bitcalc.endianness` | `little` | Byte order: `little` or `big`. The struct decoder converts to the other one |
+| `bitcalc.bitOrder` | `lsb0` | Bit numbering: `lsb0` or `msb0`. The struct decoder converts to the other one |
 
 ## Build
 
