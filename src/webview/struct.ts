@@ -2,7 +2,15 @@ import { BitOrder, Endianness, formatBits, groupDigits } from "../utils/bits";
 import { parseFieldInput } from "../utils/fieldInput";
 import { formatCArray, formatHexBytes, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
-import { IDecodedField, ILayoutOptions, decodeStruct, encodeStruct, fieldValue, writeSlot } from "../utils/structDecode";
+import {
+  IDecodedField,
+  ILayoutOptions,
+  decodeStruct,
+  encodeStruct,
+  enumeratorName,
+  fieldValue,
+  writeSlot
+} from "../utils/structDecode";
 import { buildStructHelp } from "./structHelp";
 import { STRUCT_TEMPLATES } from "./structTemplates";
 import {
@@ -27,6 +35,8 @@ interface IStructState {
   /// layout the structure is converted to ("To")
   targetEndianness: Endianness;
   targetBitOrder: BitOrder;
+  /// structure to decode when the text declares several; "" for the last one
+  rootStruct: string;
 }
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
@@ -42,6 +52,7 @@ const state: IStructState = {
   bitOrder: config.bitOrder,
   targetEndianness: config.endianness === "little" ? "big" : "little",
   targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
+  rootStruct: "",
   ...readSavedState<IStructState>(),
   ...api.getState()
 };
@@ -52,6 +63,7 @@ state.endianness = oneOf(state.endianness, ["little", "big"], "little");
 state.bitOrder = oneOf(state.bitOrder, ["lsb0", "msb0"], "lsb0");
 state.targetEndianness = oneOf(state.targetEndianness, ["little", "big"], "big");
 state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
+state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
 const saveState = createStateSaver(api);
 
 const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
@@ -86,7 +98,10 @@ byId("app").innerHTML = `
     </div>
   </div>
   <ul id="messages" class="messages"></ul>
-  <div id="summary" class="summary"></div>
+  <div class="summary-line">
+    <select id="rootStruct" title="Structure to decode" hidden></select>
+    <span id="summary" class="summary"></span>
+  </div>
   <div class="table-wrap">
     <table class="fields">
       <thead><tr>
@@ -119,6 +134,7 @@ const summary = byId("summary");
 const fieldsBody = byId("fields");
 const conversionTitle = byId("conversionTitle");
 const byteGrid = byId("byteGrid");
+const rootSelect = byId<HTMLSelectElement>("rootStruct");
 
 function sourceLayout(): ILayoutOptions {
   return { endianness: state.endianness, bitOrder: state.bitOrder };
@@ -148,7 +164,11 @@ let model: IModel | undefined;
 
 function computeModel(): IModel {
   messages.replaceChildren();
-  const parsed = parseStruct(state.definition);
+  const parsed = parseStruct(state.definition, state.rootStruct === "" ? undefined : state.rootStruct);
+  const structNames = parsed.structs.flatMap((a_struct) => (a_struct.name !== undefined ? [a_struct.name] : []));
+  rootSelect.hidden = structNames.length < 2;
+  rootSelect.replaceChildren(...structNames.map((a_name) => createElement("option", undefined, a_name)));
+  rootSelect.value = parsed.name ?? "";
   for (const error of parsed.errors) {
     addMessage(`Structure, line ${error.line}: ${error.message}`);
   }
@@ -205,15 +225,30 @@ function writeField(a_field: IDecodedField, a_raw: bigint): void {
   update();
 }
 
+/// Value shown in the DEC column; an enum value is shown with its name.
+function displayValue(a_field: IDecodedField): string {
+  const value = fieldValue(a_field);
+  if (value === undefined) {
+    return "";
+  }
+  if (a_field.enumDef !== undefined && typeof value === "bigint") {
+    const name = enumeratorName(a_field.enumDef, value);
+    return name !== undefined ? `${name} (${value})` : String(value);
+  }
+  return String(value);
+}
+
 function valueInput(a_field: IDecodedField): HTMLInputElement {
   const input = createElement("input", "value-input");
-  const value = fieldValue(a_field);
-  input.value = value === undefined ? "" : String(value);
+  const value = displayValue(a_field);
+  input.value = value;
   input.placeholder = "—";
   input.spellcheck = false;
-  input.title = "Type a value or an expression and press Enter";
+  input.title = a_field.enumDef !== undefined
+    ? `Type a value, an expression or one of: ${a_field.enumDef.members.map((a_member) => a_member.name).join(", ")}`
+    : "Type a value or an expression and press Enter";
   const commit = (): void => {
-    if (input.value === (value === undefined ? "" : String(value))) {
+    if (input.value === value) {
       return;
     }
     try {
@@ -228,7 +263,7 @@ function valueInput(a_field: IDecodedField): HTMLInputElement {
     if (a_event.key === "Enter") {
       commit();
     } else if (a_event.key === "Escape") {
-      input.value = value === undefined ? "" : String(value);
+      input.value = value;
       input.classList.remove("invalid");
     }
   });
@@ -303,6 +338,10 @@ definitionInput.addEventListener("input", () => {
 });
 bufferInput.addEventListener("input", () => {
   state.buffer = bufferInput.value;
+  update();
+});
+rootSelect.addEventListener("change", () => {
+  state.rootStruct = rootSelect.value;
   update();
 });
 offsetInput.addEventListener("input", () => {

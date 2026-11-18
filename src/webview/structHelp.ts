@@ -42,12 +42,24 @@ export function buildStructHelp(): HTMLElement {
 
   const syntax = createElement("pre", "code");
   syntax.textContent = [
-    "struct Name {              // optional wrapper, typedef accepted",
-    "    uint16_t length;       // plain field",
-    "    uint8_t  data[4];      // array",
+    "enum Kind : uint8_t {      // underlying type, int when omitted",
+    "    KIND_A = 1,            // value: number or expression",
+    "    KIND_B,                // previous + 1",
+    "    KIND_C = KIND_A << 4   // may use earlier enumerators",
+    "};",
+    "",
+    "struct Header {            // typedef struct { ... } Header; accepted",
+    "    Kind     kind;         // enum field, stored as its underlying type",
     "    uint8_t  version : 4;  // bitfield",
-    "    uint8_t          : 2;  // anonymous padding bits",
+    "    Kind     sub     : 4;  // enum bitfield",
     "    uint8_t          : 0;  // closes the current storage unit",
+    "    uint16_t length;       // plain field",
+    "};",
+    "",
+    "struct Message {           // the last structure is decoded",
+    "    Header   header;       // nested structure, fields shown as header.kind",
+    "    uint8_t  data[4];      // array (of scalars, enums or structures)",
+    "    uint8_t          : 2;  // anonymous padding bits",
     "};"
   ].join("\n");
 
@@ -59,7 +71,10 @@ export function buildStructHelp(): HTMLElement {
     ])),
     section("Syntax", syntax, list([
       "Comments // and /* */ are allowed.",
-      "Pointers, nested structures, unions and enums are not supported."
+      "A plain list of fields, without braces, is accepted too.",
+      "Declare enums and structures before or after their use; the list above the field table picks the structure to decode.",
+      "An enum value is shown as NAME (value); type a name, a value or an expression to change it.",
+      "Pointers, unions and structures defined inside another one are not supported."
     ])),
     section("Layout", list([
       "Packed: no alignment padding is added, write the padding fields yourself.",

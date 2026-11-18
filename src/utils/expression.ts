@@ -3,12 +3,15 @@ import { normalize } from "./bits";
 /// Integer expressions evaluated like the programmer mode of a calculator:
 /// every intermediate result is truncated to the word size.
 ///   literals : 42, 0x2A, 0o52, 0b101010 ('_' allowed as separator)
+///   names    : resolved by IEvalOptions.resolve (enumerators)
 ///   unary    : - + ~
 ///   binary   : * / %   + -   << >>   &   ^   |   (C precedence)
 
 export interface IEvalOptions {
   readonly width: number;
   readonly signed: boolean;
+  /// value of a name (enumerator...); names are refused without it
+  readonly resolve?: (a_name: string) => bigint | undefined;
 }
 
 export class ExpressionError extends Error {
@@ -19,6 +22,7 @@ export class ExpressionError extends Error {
 
 type Token =
   | { readonly kind: "number"; readonly value: bigint; readonly position: number }
+  | { readonly kind: "name"; readonly name: string; readonly position: number }
   | { readonly kind: "op"; readonly op: string; readonly position: number }
   | { readonly kind: "end"; readonly position: number };
 
@@ -59,6 +63,12 @@ function tokenize(a_text: string): Token[] {
       position += text.length;
       continue;
     }
+    const nameMatch = /^[A-Za-z_]\w*/.exec(rest);
+    if (nameMatch !== null) {
+      tokens.push({ kind: "name", name: nameMatch[0], position });
+      position += nameMatch[0].length;
+      continue;
+    }
     const op = OPERATORS.find((a_op) => rest.startsWith(a_op));
     if (op === undefined) {
       throw new ExpressionError(`Unexpected character "${a_text[position]}"`, position);
@@ -74,6 +84,8 @@ function describe(a_token: Token): string {
   switch (a_token.kind) {
     case "number":
       return "number";
+    case "name":
+      return `"${a_token.name}"`;
     case "op":
       return `"${a_token.op}"`;
     case "end":
@@ -125,6 +137,14 @@ export function evaluate(a_text: string, a_options: IEvalOptions): bigint {
     if (token.kind === "number") {
       index++;
       return fit(token.value);
+    }
+    if (token.kind === "name") {
+      const value = a_options.resolve?.(token.name);
+      if (value === undefined) {
+        throw new ExpressionError(`Unknown name "${token.name}"`, token.position);
+      }
+      index++;
+      return fit(value);
     }
     if (token.kind === "op") {
       if (token.op === "-" || token.op === "+" || token.op === "~") {

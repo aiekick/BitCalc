@@ -89,5 +89,5 @@ describe("decodeStruct", () => {
 test("types without _t", () => {
   const parsed = parseStruct("uint8 a; int8 b; uint16 c; int16 d; uint32 e; int32 f; uint64 g; int64 h; float i; double j; float32 k; float64 l; u8 m : 3;");
   assert.deepEqual(parsed.errors, []);
-  assert.deepEqual(parsed.fields.map((a_field) => a_field.type.size), [1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 4, 8, 1]);
+  assert.deepEqual(parsed.fields.map((a_field) => a_field.type?.size), [1, 1, 2, 2, 4, 4, 8, 8, 4, 8, 4, 8, 1]);
 });

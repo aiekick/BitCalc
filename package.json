@@ -4,6 +4,7 @@
   "description": "Programmer calculator and bitfield structure decoder: hex, decimal, octal, binary, bit toggling, LE/BE, LSB0/MSB0",
   "version": "0.0.1",
   "publisher": "aiekick",
+  "icon": "medias/icon.png",
   "galleryBanner": {
     "color": "#1e1e28",
     "theme": "dark"

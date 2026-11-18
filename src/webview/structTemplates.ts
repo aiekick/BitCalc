@@ -28,6 +28,29 @@ export const STRUCT_TEMPLATES: readonly IStructTemplate[] = [
 };`
   },
   {
+    label: "Enum and nested structures",
+    definition: `// Enums first, then the structures using them.
+// The last structure is decoded; pick another one in the list above the table.
+enum MsgType : uint8_t {
+    MSG_PING = 1,
+    MSG_PONG,
+    MSG_DATA = 0x10
+};
+
+struct Header {
+    MsgType  type;
+    uint8_t  version : 4;
+    uint8_t  flags   : 4;
+    uint16_t length;
+};
+
+struct Message {
+    Header   header;
+    uint32_t sequence;
+    uint8_t  payload[4];
+};`
+  },
+  {
     label: "IPv4 header (BE, MSB0)",
     endianness: "big",
     bitOrder: "msb0",

@@ -1,5 +1,5 @@
 import { BitOrder, Endianness, fromBytes, maskOf, toBytes, toSigned } from "./bits";
-import { IFieldDef, IScalarType } from "./structDef";
+import { IEnumDef, IFieldDef, IScalarType } from "./structDef";
 
 /// Layout rules (packed, no alignment padding):
 /// - a plain field starts at the current byte offset and is stored with the
@@ -23,10 +23,13 @@ export interface ILayoutOptions {
 export type IDecodeOptions = ILayoutOptions;
 
 export interface IFieldSlot {
-  /// undefined for padding bits; array elements are named "name[i]"
+  /// undefined for padding bits; array elements are named "name[i]",
+  /// fields of a nested structure "outer.inner"
   readonly name: string | undefined;
   readonly typeName: string;
   readonly type: IScalarType;
+  /// set for an enum field
+  readonly enumDef: IEnumDef | undefined;
   /// offset of the field, or of the storage unit holding the bitfield
   readonly byteOffset: number;
   /// size in bytes of the field, or of the storage unit of the bitfield
@@ -59,7 +62,11 @@ interface IStorageUnit {
   used: number;
 }
 
-export function layoutStruct(a_fields: readonly IFieldDef[]): IStructLayout {
+/// Nested structures deeper than this are cut (cycles are already refused
+/// by the parser; this only bounds the work)
+const MAX_NESTING = 32;
+
+export function layoutStruct(a_fields: readonly IFieldDef[], a_depth = 0): IStructLayout {
   const slots: IFieldSlot[] = [];
   let offset = 0;
   let unit: IStorageUnit | undefined;
@@ -71,14 +78,38 @@ export function layoutStruct(a_fields: readonly IFieldDef[]): IStructLayout {
   };
 
   for (const field of a_fields) {
+    const count = field.count ?? 1;
+    const elementName = (a_index: number): string | undefined =>
+      field.count === undefined ? field.name : `${field.name}[${a_index}]`;
+
+    if (field.structDef !== undefined) {
+      closeUnit();
+      if (a_depth >= MAX_NESTING) {
+        continue;
+      }
+      const inner = layoutStruct(field.structDef.fields, a_depth + 1);
+      for (let elementIndex = 0; elementIndex < count; elementIndex++) {
+        const prefix = elementName(elementIndex);
+        for (const slot of inner.slots) {
+          slots.push({
+            ...slot,
+            name: slot.name === undefined ? undefined : `${prefix}.${slot.name}`,
+            byteOffset: offset + slot.byteOffset
+          });
+        }
+        offset += inner.size;
+      }
+      continue;
+    }
+
     if (field.bits === undefined) {
       closeUnit();
-      const count = field.count ?? 1;
       for (let elementIndex = 0; elementIndex < count; elementIndex++) {
         slots.push({
-          name: field.count === undefined ? field.name : `${field.name}[${elementIndex}]`,
+          name: elementName(elementIndex),
           typeName: field.typeName,
           type: field.type,
+          enumDef: field.enumDef,
           byteOffset: offset,
           unitSize: field.type.size,
           bitOffset: undefined,
@@ -100,6 +131,7 @@ export function layoutStruct(a_fields: readonly IFieldDef[]): IStructLayout {
       name: field.name,
       typeName: field.typeName,
       type: field.type,
+      enumDef: field.enumDef,
       byteOffset: unit.offset,
       unitSize: unit.size,
       bitOffset: unit.used,
@@ -109,6 +141,11 @@ export function layoutStruct(a_fields: readonly IFieldDef[]): IStructLayout {
   }
   closeUnit();
   return { slots, size: offset };
+}
+
+/// Name of the enumerator holding a_value, if any.
+export function enumeratorName(a_enumDef: IEnumDef, a_value: bigint): string | undefined {
+  return a_enumDef.members.find((a_member) => a_member.value === a_value)?.name;
 }
 
 export function readUnsigned(a_bytes: Uint8Array, a_offset: number, a_size: number, a_endianness: Endianness): bigint | undefined {

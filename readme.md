@@ -39,22 +39,35 @@ The precedence is the one of C. Every intermediate result is truncated to the wo
 
 Decodes a raw buffer with a C structure definition, bitfields included. Each field is shown in decimal, hex, octal and binary.
 
-**Structure**: a C `struct` with its braces, a `typedef struct { ... } Name;`, or a plain list of fields. Comments are allowed.
+**Structure**: C declarations. Enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. A plain list of fields without braces works too. Comments are allowed.
 
 ```c
-struct Header {
+enum MsgType : uint8_t {    // underlying type, int when omitted
+    MSG_PING = 1,
+    MSG_PONG,               // previous + 1
+    MSG_DATA = 0x10
+};
+
+struct Header {             // typedef struct { ... } Header; works too
+    MsgType  type;          // enum field
     uint8_t  version : 4;   // bitfield
     uint8_t          : 2;   // anonymous padding bits
     uint8_t  flags   : 2;
     uint16_t length;        // plain field
+};
+
+struct Message {
+    Header   header;        // nested structure, shown as header.type, header.version...
     uint8_t  data[4];       // array
     float    gain;
 };
 ```
 
-The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
+Enumerators take a number or an expression that may use earlier enumerators (`KIND_C = KIND_A << 4`). An enum field is stored as its underlying type, can be a bitfield, and its value is shown as `NAME (value)`.
 
-Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Pointers, nested structures and unions are not supported.
+The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, an enum with nested structures, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
+
+Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Pointers, unions and structures defined inside another one are not supported: declare them before.
 
 **Buffer**: hex bytes written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`. **Offset** skips the given number of bytes before the structure.
 
@@ -77,7 +90,7 @@ The fields keep the same values in both layouts; only the bytes change. Under th
 
 ### Editing values
 
-The **DEC** column can be edited: type a value and press `Enter`, the buffer and its conversion are updated. Integer fields accept the calculator expressions (`0x1F`, `-1`, `1 << 3`) and are truncated to the field width, `bool` fields accept `true`, `false`, `1` or `0`, `float` and `double` fields accept any number. `Escape` cancels. When the buffer is shorter than the structure, it is completed with zeros. Starting from an empty buffer, this builds the bytes of a structure field by field.
+The **DEC** column can be edited: type a value and press `Enter`, the buffer and its conversion are updated. Integer fields accept the calculator expressions (`0x1F`, `-1`, `1 << 3`) and are truncated to the field width, enum fields also accept their enumerator names, `bool` fields accept `true`, `false`, `1` or `0`, `float` and `double` fields accept any number. `Escape` cancels. When the buffer is shorter than the structure, it is completed with zeros. Starting from an empty buffer, this builds the bytes of a structure field by field.
 
 ## From the editor
 
@@ -107,4 +120,5 @@ npm install
 npm run check     # type check
 npm test          # unit tests
 npm run package   # builds the bitcalc-<version>.vsix
+node scripts/genIcon.js   # regenerates medias/icon.png
 ```
