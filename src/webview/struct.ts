@@ -57,7 +57,6 @@ interface IStructState {
 type NameMode = "path" | "name";
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
-const BYTES_PER_GRID_ROW = 16;
 
 const api = getVsCodeApi<IStructState>();
 const config = readInitialConfig();
@@ -564,9 +563,30 @@ function renderConversion(a_model: IModel): void {
     targetBufferInput.value = formatBuffer(a_model.converted, state.bufferFormat, state.targetEndianness);
     targetBufferInput.classList.remove("invalid");
   }
+  renderByteGrid(a_model);
+}
+
+/// Bytes on one line of the byte grid: as many as fit in the width of the
+/// view. The grid is first drawn on one line to measure its cells.
+function renderByteGrid(a_model: IModel): void {
+  drawByteGrid(a_model, Math.max(1, a_model.size));
+  const available = byteGrid.parentElement?.clientWidth ?? 0;
+  const label = byteGrid.querySelector<HTMLElement>("tr:nth-child(2) th");
+  const cells = byteGrid.querySelectorAll<HTMLElement>("tr:nth-child(2) td");
+  if (available <= 0 || label === null || cells.length === 0) {
+    return;
+  }
+  const cellWidth = Math.max(...Array.from(cells, (a_cell) => a_cell.getBoundingClientRect().width));
+  const perRow = Math.max(1, Math.floor((available - label.getBoundingClientRect().width - 2) / cellWidth));
+  if (perRow < a_model.size) {
+    drawByteGrid(a_model, perRow);
+  }
+}
+
+function drawByteGrid(a_model: IModel, a_perRow: number): void {
   byteGrid.replaceChildren();
-  for (let start = 0; start < a_model.size; start += BYTES_PER_GRID_ROW) {
-    const end = Math.min(start + BYTES_PER_GRID_ROW, a_model.size);
+  for (let start = 0; start < a_model.size; start += a_perRow) {
+    const end = Math.min(start + a_perRow, a_model.size);
     const header = createElement("tr", "byte-grid-offsets");
     const fromRow = createElement("tr");
     const toRow = createElement("tr");
@@ -825,5 +845,14 @@ definitionInput.value = state.definition;
 offsetInput.value = String(state.offset);
 showLayouts();
 update();
+// Lay the byte grid out again when the view is resized
+let gridWidth = 0;
+new ResizeObserver(() => {
+  const width = byteGrid.parentElement?.clientWidth ?? 0;
+  if (model !== undefined && width !== gridWidth) {
+    gridWidth = width;
+    renderByteGrid(model);
+  }
+}).observe(byteGrid.parentElement ?? byteGrid);
 bindPresetBar(api, state);
 api.postMessage({ type: "ready" });

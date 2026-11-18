@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.28] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: the Byte by byte grid puts as many bytes on a line as the view is wide, instead of 16, and lays itself out again when the view is resized.
+
 ## [0.0.27] - 2026-11-18
 
 ### Changed
