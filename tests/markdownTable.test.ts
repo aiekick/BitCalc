@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { markdownTable } from "../src/utils/markdownTable";
+import { cppLineComment, markdownTable, textTable } from "../src/utils/markdownTable";
 
 describe("markdownTable", () => {
   test("pads the columns and aligns numbers on the right", () => {
@@ -19,6 +19,20 @@ describe("markdownTable", () => {
       "| A    | B   |",
       "| ---- | --- |",
       "| x\\|y |     |"
+    ].join("\n"));
+  });
+});
+
+describe("textTable / cppLineComment", () => {
+  test("aligns the columns and comments every line", () => {
+    const text = cppLineComment(`Message\n\n${textTable(["Word", "Field"], [["0", "type"], ["12", "a"]], ["right", "left"])}`);
+    assert.equal(text, [
+      "// Message",
+      "//",
+      "// Word  Field",
+      "// ----  -----",
+      "//    0  type",
+      "//   12  a"
     ].join("\n"));
   });
 });

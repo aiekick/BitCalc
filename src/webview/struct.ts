@@ -3,7 +3,7 @@ import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
 import { formatDeclarations } from "../utils/structFormat";
-import { ColumnAlign, markdownTable } from "../utils/markdownTable";
+import { ColumnAlign, cppLineComment, markdownTable, textTable } from "../utils/markdownTable";
 import {
   IDecodedField,
   ILayoutOptions,
@@ -114,7 +114,7 @@ byId("app").innerHTML = `
     <select id="rootStruct" title="Structure to decode" hidden></select>
     <span id="summary" class="summary"></span>
     <span class="copy-group">
-      <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button>
+      <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button><button id="copyCppComment" title="Copy the field table as a C++ comment (// lines), to paste above the structure in the code">C++ comment</button>
     </span>
   </div>
   <div class="table-wrap">
@@ -458,18 +458,34 @@ function valueCells(a_field: IDecodedField): string[] {
 const TABLE_HEADERS = ["Word", "Bit min", "Bit max", "Bits", "Field", "Type", "DEC", "HEX", "OCT", "BIN"];
 const TABLE_ALIGN: ColumnAlign[] = ["right", "right", "right", "right", "left", "left", "right", "right", "right", "right"];
 
-/// The field table as Markdown, under a line naming the structure and its layout.
-function fieldsMarkdown(a_model: IModel): string {
-  const rows = a_model.decoded.map((a_field) => [
+/// Rows of the field table as text, as copied by the export buttons.
+function tableRows(a_model: IModel): string[][] {
+  return a_model.decoded.map((a_field) => [
     ...placementCells(a_field),
     a_field.name ?? "(padding)",
     a_field.typeName,
     a_field.raw === undefined ? "—" : displayValue(a_field),
     ...valueCells(a_field)
   ]);
+}
+
+/// Line naming the structure, its layout and its size, above an export.
+function exportTitle(a_model: IModel, a_bold: boolean): string {
   const words = (a_model.size * 8) / state.wordBits;
-  const title = `**${a_model.name ?? "Structure"}**: ${layoutName(sourceLayout())}, ${words} word${words === 1 ? "" : "s"} of ${state.wordBits} bits (${a_model.size} bytes)`;
-  return `${title}\n\n${markdownTable(TABLE_HEADERS, rows, TABLE_ALIGN)}\n`;
+  const name = a_model.name ?? "Structure";
+  return `${a_bold ? `**${name}**` : name}: ${layoutName(sourceLayout())}, ${words} word${words === 1 ? "" : "s"} of ${state.wordBits} bits (${a_model.size} bytes)`;
+}
+
+/// The field table as Markdown, under a line naming the structure and its layout.
+function fieldsMarkdown(a_model: IModel): string {
+  return `${exportTitle(a_model, true)}\n\n${markdownTable(TABLE_HEADERS, tableRows(a_model), TABLE_ALIGN)}\n`;
+}
+
+/// The field table as a C++ line comment block, in ASCII only (the dash of
+/// a missing value becomes "-", a field spanning words reads "2-3").
+function fieldsCppComment(a_model: IModel): string {
+  const rows = tableRows(a_model).map((a_row) => a_row.map((a_cell) => a_cell.replace(/[\u2013\u2014]/g, "-")));
+  return `${cppLineComment(`${exportTitle(a_model, false)}\n\n${textTable(TABLE_HEADERS, rows, TABLE_ALIGN)}`)}\n`;
 }
 
 function renderFields(a_model: IModel): void {
@@ -639,6 +655,11 @@ byId("swapLayouts").addEventListener("click", () => {
   update();
 });
 
+byId("copyCppComment").addEventListener("click", () => {
+  if (model !== undefined) {
+    api.postMessage({ type: "copy", text: fieldsCppComment(model) });
+  }
+});
 byId("copyMarkdown").addEventListener("click", () => {
   if (model !== undefined) {
     api.postMessage({ type: "copy", text: fieldsMarkdown(model) });

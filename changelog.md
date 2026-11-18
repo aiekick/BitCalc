@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.22] - 2026-11-18
+
+### Added
+
+- Struct Decoder: **C++ comment** button next to **Markdown**, copies the field table as a `//` comment block with aligned columns (ASCII only), under a line giving the structure, its From layout and its size.
+
 ## [0.0.21] - 2026-11-18
 
 ### Added

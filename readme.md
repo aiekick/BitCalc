@@ -96,7 +96,7 @@ Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `ui
 
 Each row shows the **Word** holding the field, counted from 0, **Bit min** and **Bit max**, its first and last bits inside that word (restarting at 0 with each word), its width in **Bits**, and the value. A field wider than a word shows the range of its words, such as `2–3`, with its bits relative to itself.
 
-**Markdown**, at the right of the summary line, copies the field table as a Markdown table, under a line giving the structure, its From layout and its size in words, ready to paste in a document or a review.
+**Markdown**, at the right of the summary line, copies the field table as a Markdown table, under a line giving the structure, its From layout and its size in words, ready to paste in a document or a review. **C++ comment** copies the same table as `//` lines with aligned columns, in ASCII only, to paste above the structure in the code.
 
 ### Converting between layouts
 
