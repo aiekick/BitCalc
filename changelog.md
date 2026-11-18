@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.24] - 2026-11-18
+
+### Added
+
+- Struct Decoder: **Names** switch (**Path** / **Name**) next to the summary: the fields of nested structures are shown with their whole path (`header.version`) or their own name only (`version`, path in the tooltip), in the table and in the Markdown and C++ exports. Kept with the view state and in the configurations.
+
 ## [0.0.23] - 2026-11-18
 
 ### Fixed

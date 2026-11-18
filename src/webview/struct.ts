@@ -49,7 +49,12 @@ interface IStructState {
   /// how both buffers are shown, typed and copied; state.buffer itself is
   /// always kept as hex bytes
   bufferFormat: BufferFormat;
+  /// fields of nested structures shown with their whole path
+  /// (header.version) or with their own name only (version)
+  nameMode: NameMode;
 }
+
+type NameMode = "path" | "name";
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
 const BYTES_PER_GRID_ROW = 16;
@@ -66,6 +71,7 @@ const state: IStructState = {
   targetBitOrder: config.bitOrder === "lsb0" ? "msb0" : "lsb0",
   rootStruct: "",
   wordBits: 32,
+  nameMode: "path",
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -79,6 +85,7 @@ state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
 state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
 state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
+state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 const saveState = createStateSaver(api);
 
 const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
@@ -114,6 +121,10 @@ byId("app").innerHTML = `
     <select id="rootStruct" title="Structure to decode" hidden></select>
     <span id="summary" class="summary"></span>
     <span class="copy-group">
+      <span class="layout-label" title="How the fields of nested structures are named">Names</span>
+      <div class="segmented" id="nameMode" title="Fields of nested structures: whole path (header.version) or own name only (version)">
+        <button data-value="path">Path</button><button data-value="name">Name</button>
+      </div>
       <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button><button id="copyCppComment" title="Copy the field table as a C++ comment (// lines), to paste above the structure in the code">C++ comment</button>
     </span>
   </div>
@@ -462,7 +473,7 @@ const TABLE_ALIGN: ColumnAlign[] = ["right", "right", "right", "right", "left", 
 function tableRows(a_model: IModel): string[][] {
   return a_model.decoded.map((a_field) => [
     ...placementCells(a_field),
-    a_field.name ?? "(padding)",
+    fieldLabel(a_field),
     a_field.typeName,
     a_field.raw === undefined ? "—" : displayValue(a_field),
     ...valueCells(a_field)
@@ -488,6 +499,16 @@ function fieldsCppComment(a_model: IModel): string {
   return `${cppLineComment(`${exportTitle(a_model, false)}\n\n${textTable(TABLE_HEADERS, rows, TABLE_ALIGN)}`)}\n`;
 }
 
+/// Name of a field as shown in the table and the exports: its whole path
+/// (header.version), or with Names set to Name, only what follows the last
+/// dot (version).
+function fieldLabel(a_field: IDecodedField): string {
+  if (a_field.name === undefined) {
+    return "(padding)";
+  }
+  return state.nameMode === "name" ? a_field.name.slice(a_field.name.lastIndexOf(".") + 1) : a_field.name;
+}
+
 function renderFields(a_model: IModel): void {
   fieldsBody.replaceChildren();
   for (const [index, field] of a_model.decoded.entries()) {
@@ -499,9 +520,11 @@ function renderFields(a_model: IModel): void {
     for (const text of placementCells(field)) {
       row.append(createElement("td", "number", text));
     }
-    for (const text of [field.name ?? "(padding)", field.typeName]) {
-      row.append(createElement("td", undefined, text));
+    const nameCell = createElement("td", undefined, fieldLabel(field));
+    if (field.name !== undefined && state.nameMode === "name" && field.name.includes(".")) {
+      nameCell.title = field.name;
     }
+    row.append(nameCell, createElement("td", undefined, field.typeName));
     const valueCell = createElement("td", "value");
     valueCell.append(field.enumDef !== undefined ? enumSelect(field, index) : valueInput(field, index));
     row.append(valueCell);
@@ -661,6 +684,12 @@ byId("swapLayouts").addEventListener("click", () => {
   showLayouts();
   update();
 });
+
+const showNameMode = bindSegmented<NameMode>(byId("nameMode"), (a_mode) => {
+  state.nameMode = a_mode;
+  update();
+});
+showNameMode(state.nameMode);
 
 byId("copyCppComment").addEventListener("click", () => {
   if (model !== undefined) {
