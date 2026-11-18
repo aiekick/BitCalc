@@ -3,6 +3,7 @@ import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
 import { formatDeclarations } from "../utils/structFormat";
+import { ColumnAlign, markdownTable } from "../utils/markdownTable";
 import {
   IDecodedField,
   ILayoutOptions,
@@ -111,6 +112,9 @@ byId("app").innerHTML = `
   <div class="summary-line">
     <select id="rootStruct" title="Structure to decode" hidden></select>
     <span id="summary" class="summary"></span>
+    <span class="copy-group">
+      <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button>
+    </span>
   </div>
   <div class="table-wrap">
     <table class="fields">
@@ -365,6 +369,35 @@ function valueInput(a_field: IDecodedField): HTMLInputElement {
   return input;
 }
 
+/// HEX, OCT and BIN cells of a field.
+function valueCells(a_field: IDecodedField): string[] {
+  const raw = a_field.raw;
+  return raw === undefined
+    ? ["—", "—", "—"]
+    : [
+      formatBits(raw, a_field.bitWidth, 16, true),
+      formatBits(raw, a_field.bitWidth, 8, false),
+      groupDigits(formatBits(raw, a_field.bitWidth, 2, true), 4)
+    ];
+}
+
+const TABLE_HEADERS = ["Word", "Bit min", "Bit max", "Bits", "Field", "Type", "DEC", "HEX", "OCT", "BIN"];
+const TABLE_ALIGN: ColumnAlign[] = ["right", "right", "right", "right", "left", "left", "right", "right", "right", "right"];
+
+/// The field table as Markdown, under a line naming the structure and its layout.
+function fieldsMarkdown(a_model: IModel): string {
+  const rows = a_model.decoded.map((a_field) => [
+    ...placementCells(a_field),
+    a_field.name ?? "(padding)",
+    a_field.typeName,
+    a_field.raw === undefined ? "—" : displayValue(a_field),
+    ...valueCells(a_field)
+  ]);
+  const words = (a_model.size * 8) / state.wordBits;
+  const title = `**${a_model.name ?? "Structure"}**: ${layoutName(sourceLayout())}, ${words} word${words === 1 ? "" : "s"} of ${state.wordBits} bits (${a_model.size} bytes)`;
+  return `${title}\n\n${markdownTable(TABLE_HEADERS, rows, TABLE_ALIGN)}\n`;
+}
+
 function renderFields(a_model: IModel): void {
   fieldsBody.replaceChildren();
   for (const field of a_model.decoded) {
@@ -382,15 +415,7 @@ function renderFields(a_model: IModel): void {
     const valueCell = createElement("td", "value");
     valueCell.append(field.enumDef !== undefined ? enumSelect(field) : valueInput(field));
     row.append(valueCell);
-    const raw = field.raw;
-    const cells = raw === undefined
-      ? ["—", "—", "—"]
-      : [
-        formatBits(raw, field.bitWidth, 16, true),
-        formatBits(raw, field.bitWidth, 8, false),
-        groupDigits(formatBits(raw, field.bitWidth, 2, true), 4)
-      ];
-    for (const text of cells) {
+    for (const text of valueCells(field)) {
       row.append(createElement("td", "value", text));
     }
     fieldsBody.append(row);
@@ -533,6 +558,12 @@ byId("swapLayouts").addEventListener("click", () => {
   [state.bitOrder, state.targetBitOrder] = [state.targetBitOrder, state.bitOrder];
   showLayouts();
   update();
+});
+
+byId("copyMarkdown").addEventListener("click", () => {
+  if (model !== undefined) {
+    api.postMessage({ type: "copy", text: fieldsMarkdown(model) });
+  }
 });
 
 for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-copy]"))) {

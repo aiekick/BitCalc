@@ -39,7 +39,9 @@ export class BitCalcViewProvider implements vscode.WebviewViewProvider {
         void this.m_memento.update(this.stateKey, a_message.state);
       } else if (a_message.type === "copy" && typeof a_message.text === "string") {
         void vscode.env.clipboard.writeText(a_message.text);
-        vscode.window.setStatusBarMessage(`BitCalc: copied ${a_message.text}`, 2000);
+        const lines = a_message.text.trimEnd().split("\n");
+        const shown = lines.length > 1 ? `${lines.length} lines` : lines[0].length > 60 ? `${lines[0].slice(0, 60)}…` : lines[0];
+        vscode.window.setStatusBarMessage(`BitCalc: copied ${shown}`, 2000);
       }
     });
     a_view.onDidDispose(() => {

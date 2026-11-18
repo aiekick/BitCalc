@@ -4,6 +4,50 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.18] - 2026-11-18
+
+### Added
+
+- Struct Decoder: **Markdown** button next to the summary, copies the field table (Word, Bit min, Bit max, Bits, Field, Type, DEC, HEX, OCT, BIN) as a Markdown table under a line giving the structure, its From layout and its size.
+
+### Fixed
+
+- Readme: removed a duplicated block and the old layout rules left by 0.0.17; changelog entries 0.0.13 to 0.0.17 restored.
+
+## [0.0.17] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: the structure is laid out as in an interface control document, in absolute terms, with no compiler rule. The message is a sequence of words (**Word**: 8, 16, 32 or 64 bits, 32 by default); fields follow each other bit by bit inside the current word whatever their type, a field that does not fit starts the next word, a nested structure starts a word and fills whole words, `: 0` moves to the next word.
+
+### Removed
+
+- Struct Decoder: the Natural / Packed alignment and the "Offset in" choice; `#pragma pack` and packed attributes no longer change anything.
+
+## [0.0.16] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: a field spanning words shows the word range with its bits relative to itself, 0 to width - 1.
+
+## [0.0.15] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: Bit min / Bit max restart at 0 with each word: bit 31 of word 0 is followed by bit 0 of word 1.
+
+## [0.0.14] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: Bit min / Bit max counted from the start of the structure in allocation order (first byte: bits 0 to 7, second: 8 to 15...).
+
+## [0.0.13] - 2026-11-18
+
+### Added
+
+- Struct Decoder: **Format** chooses how both buffers are shown, typed and copied: bytes (`FA 00` or `0xFA, 0x00`) or 16, 32 or 64-bit words (`0xFA00`...) read in the byte order of each layout. The copy buttons copy in that format, as text or as a C array.
+
 ## [0.0.12] - 2026-11-18
 
 ### Added

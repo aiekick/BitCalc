@@ -96,86 +96,13 @@ Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `ui
 
 Each row shows the **Word** holding the field, counted from 0, **Bit min** and **Bit max**, its first and last bits inside that word (restarting at 0 with each word), its width in **Bits**, and the value. A field wider than a word shows the range of its words, such as `2–3`, with its bits relative to itself.
 
-### Converting between layouts
-
-The **From** controls give the layout of the value: bit numbering (**LSB0** or **MSB0**) and byte order (**LE** or **BE**). The **To** controls give the layout to convert it to. Each bit keeps its number: bit 3 in the From numbering is bit 3 in the To numbering, so going from LSB0 to MSB0 reverses the bits of the word, and going from LE to BE reverses its bytes.
-
-- **Converted**: the converted value, as a reader using the From layout finds it in memory, in hex, decimal, octal and binary, with copy buttons.
-- **Memory**: the bytes of the value (From) and of its conversion (To) in memory order, the bytes that differ highlighted.
-- **⇄** swaps From and To and replaces the value by its conversion, so pressing it twice gives the value back.
-
-For instance, `0x12345678` in LE LSB0 converted to BE MSB0 gives `0x482C6A1E`: bits reversed (`0x1E6A2C48`), then bytes reversed.
-
-### Expressions
-
-The expression field evaluates integer expressions when you press `Enter`:
-
-| Element | Syntax |
-|---|---|
-| Literals | `42`, `0x2A`, `0o52`, `0b101010`, with `_` as separator |
-| Unary | `-x`, `+x`, `~x` |
-| Binary, by decreasing precedence | `*` `/` `%`, then `+` `-`, then `<<` `>>`, then `&`, then `^`, then `|` |
-| Grouping | `( )` |
-
-The precedence is the one of C. Every intermediate result is truncated to the word size, so in 8 bits signed `127 + 1` gives `-128`. Division truncates towards zero. On error, the message gives the column.
-
-## Struct Decoder
-
-Decodes a raw buffer with a C structure definition, bitfields included. Each field is shown in decimal, hex, octal and binary.
-
-**Structure**: C declarations. Typedefs and enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. A plain list of fields without braces works too. Comments are allowed.
-
-```c
-typedef uint32_t t_date;    // alias of a scalar, enum or structure type
-
-enum MsgType : uint8_t {    // underlying type, int when omitted
-    MSG_PING = 1,
-    MSG_PONG,               // previous + 1
-    MSG_DATA = 0x10
-};
-
-struct Header {             // typedef struct { ... } Header; works too
-    MsgType  type;          // enum field
-    uint8_t  version : 4;   // bitfield
-    uint8_t          : 2;   // anonymous padding bits
-    uint8_t  flags   : 2;
-    uint16_t length;        // plain field
-};
-
-struct Message {
-    Header   header;        // nested structure, shown as header.type, header.version...
-    uint8_t  data[4];       // array
-    t_date   date;          // typedef alias
-};
-```
-
-The declarations are coloured as you type, and the lines with an error are underlined. **Format** (or `Shift+Alt+F` in the structure) indents them and aligns the types, names, bit widths, enumerator values and trailing comments in columns; `Ctrl+Z` undoes it. Text that cannot be formatted without changing it, such as a missing `}`, is left as is.
-
-Enumerators take a number or an expression that may use earlier enumerators (`KIND_C = KIND_A << 4`). An enum field is stored as its underlying type, can be a bitfield, and its value is shown as `NAME (value)`. It is read as signed only when the enum has a negative enumerator, so a 1 bit enum bitfield holding 1 is 1.
-
-The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, an enum with nested structures, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
-
-Known types: `uint8_t` to `uint64_t` and `int8_t` to `int64_t` (also written `uint8`, `u8`, `int8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Typedefs of arrays, pointers, unions and structures defined inside another one are not supported: declare the structures before.
-
-**Data**: the view reads from top to bottom: the declarations, the field table of the decoded structure, then the **Data of <structure>** section holding the bytes it is decoded from. They are written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`; **Offset** skips the given number of bytes before the structure.
-
-**Layout rules**, chosen to be predictable:
-
-- **Alignment**: with **Natural** (the default, as C compilers do), each field starts at a multiple of its size, a bitfield unit at a multiple of its type size, a nested structure at a multiple of its largest member, and a structure ends at a multiple of its alignment. With **Packed**, no padding is added. `#pragma pack(N)` (with `push`, `pop` and `#pragma pack()`) and `__attribute__((packed))` in the declarations take precedence for the structures they apply to, nested ones included. The bytes added by the alignment show as `(padding)` rows, and the summary gives the alignment of the structure. Other preprocessor lines, such as `#include`, are ignored, so a header can be pasted as is.
-- Plain fields are read with the chosen byte order (**LE** or **BE**).
-- Consecutive bitfields share a storage unit of the size of their declared type while they fit in it. A bitfield of another type size, a bitfield that does not fit, a plain field or a `: 0` bitfield starts a new unit. This is what MSVC does; GCC and Clang can also mix types in one unit.
-- The storage unit is read with the chosen byte order, then the bitfields are allocated from its bit 0: the least significant bit in **LSB0**, the most significant one in **MSB0**.
-
-Each row shows where the field lies, its width in **Bits**, and the value. **Offset in**, above the table, chooses the unit of the first column:
-
-- **32-bit words** (the default), **16-bit words**, **64-bit words** or **bytes**: the first column is the word (or byte) number holding the field, counted from 0, and **Bit min** / **Bit max** are its first and last bits inside that word. The bits are counted in allocation order (the first byte holds bits 0 to 7, the second 8 to 15, a bitfield sits at the first bit of its storage unit plus its place in the unit) and restart at 0 with each word: with 32-bit words, bit 31 of word 0 is followed by bit 0 of word 1. A field spanning words, as happens in packed structures, shows the word range, such as `0–1`, and its bits relative to itself, from 0 to its width minus 1.
-- **storage units**: the first column is the byte offset of the field (of its storage unit for a bitfield), and the bits are numbered inside the storage unit (inside the field itself for a plain field).
+**Markdown**, at the right of the summary line, copies the field table as a Markdown table, under a line giving the structure, its From layout and its size in words, ready to paste in a document or a review.
 
 ### Converting between layouts
 
 The toolbar has two layouts: **From**, the byte order and bit numbering the buffer is written in, and **To**, the layout to convert it to. For instance, a structure written by a little endian compiler that allocates bitfields from the LSB (**From** LE LSB0) and expected by a big endian target that allocates them from the MSB (**To** BE MSB0).
 
-The fields keep the same values in both layouts; only the bytes change. The data section shows the bytes in the From layout, with the same structure in the To layout right under it. Both can be edited: typing bytes in the To data rewrites the From data through the reverse conversion. **Byte by byte** compares them, with the bytes that differ highlighted. The **Hex** and **C array** buttons next to each one copy it, as `5A F4 34 12` or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
+The fields keep the same values in both layouts; only the bytes change. The data section shows the bytes in the From layout, with the same structure in the To layout right under it. Both can be edited: typing bytes in the To data rewrites the From data through the reverse conversion. **Byte by byte** compares them, with the bytes that differ highlighted. **Format** chooses how both are shown, typed and copied: bytes (`FA 00` or `0xFA, 0x00`) or 16, 32 or 64-bit words (`0xFA00`...), each word read in the byte order of its layout. The **Copy** and **C array** buttons next to each one copy it in that format, as text or as `{ 0x5A, 0xF4, 0x34, 0x12 }`, ready to paste in a unit test.
 
 **⇄** swaps the two layouts and replaces the buffer by its conversion, so the values stay the same.
 
