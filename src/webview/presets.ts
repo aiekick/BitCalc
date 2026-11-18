@@ -24,6 +24,7 @@ export const PRESET_BAR_HTML = `
   <div class="preset-bar">
     <label class="layout-label" for="presetSelect" title="Named configurations: the calculator and the structure decoder together, one .bc file each in the .vscode folder">Config</label>
     <select id="presetSelect" title="Load a saved configuration in both views"></select>
+    <button id="presetRefresh" title="Read the .vscode folder again for .bc files">↻</button>
     <input id="presetName" spellcheck="false" placeholder="Label" title="Label to save the current configuration under (Enter saves)">
     <button id="presetReload" title="Load the selected configuration again from its file, dropping the changes made since">Reload</button>
     <button id="presetSave" title="Save both views under the label, in .vscode/<label>.bc; an existing label is overwritten">Save</button>
@@ -40,6 +41,7 @@ export function bindPresetBar<TState>(a_api: IVsCodeApi<TState>, a_state: TState
   const saveButton = byId<HTMLButtonElement>("presetSave");
   const deleteButton = byId<HTMLButtonElement>("presetDelete");
   const reloadButton = byId<HTMLButtonElement>("presetReload");
+  byId<HTMLButtonElement>("presetRefresh").addEventListener("click", () => a_api.postMessage({ type: "presetRefresh" }));
   let deleteArmed: ReturnType<typeof setTimeout> | undefined;
 
   const disarmDelete = (): void => {

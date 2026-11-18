@@ -64,12 +64,16 @@ export class BitCalcViewProvider implements vscode.WebviewViewProvider, IPresetV
       if (a_message.type === "ready") {
         this.m_ready = true;
         this.flush();
+        // The list may have been read after the page was built
+        void this.m_presets.refresh();
       } else if (a_message.type === "saveState" && typeof a_message.state === "object" && a_message.state !== null) {
         void this.m_memento.update(this.stateKey, a_message.state);
       } else if (a_message.type === "presetSave" && typeof a_message.name === "string") {
         void this.m_presets.save(a_message.name, this.viewId, a_message.state);
       } else if (a_message.type === "presetLoad" && typeof a_message.name === "string") {
         void this.m_presets.load(a_message.name);
+      } else if (a_message.type === "presetRefresh") {
+        void this.m_presets.refresh();
       } else if (a_message.type === "presetDelete" && typeof a_message.name === "string") {
         void this.m_presets.delete(a_message.name);
       } else if (a_message.type === "copy" && typeof a_message.text === "string") {
@@ -77,6 +81,11 @@ export class BitCalcViewProvider implements vscode.WebviewViewProvider, IPresetV
         const lines = a_message.text.trimEnd().split("\n");
         const shown = lines.length > 1 ? `${lines.length} lines` : lines[0].length > 60 ? `${lines[0].slice(0, 60)}…` : lines[0];
         vscode.window.setStatusBarMessage(`BitCalc: copied ${shown}`, 2000);
+      }
+    });
+    a_view.onDidChangeVisibility(() => {
+      if (a_view.visible) {
+        void this.m_presets.refresh();
       }
     });
     a_view.onDidDispose(() => {

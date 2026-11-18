@@ -108,13 +108,17 @@ The fields keep the same values in both layouts; only the bytes change. The data
 
 **⇄** swaps the two layouts and replaces the buffer by its conversion, so the values stay the same.
 
+Changing the **From** byte order or bit numbering keeps the values too: the DEC column holds what was typed, so the structure bytes of the buffer are rewritten in the new layout rather than read again with it. To read existing bytes with another layout, change the layout first, then paste the bytes.
+
+In the bytes formats, the buffers show the bytes in memory order. LE LSB0 and BE MSB0 both fill a word from its first byte, so a field of whole bytes keeps its bytes in both (`45 03 00 00` for `version = 0x45, type = 3`); the words formats show the word values, `0x00000345` in LE LSB0 and `0x45030000` in BE MSB0.
+
 ### Editing values
 
 The **DEC** column can be edited: type a value and press `Enter`, the buffer and its conversion are updated. Enum fields show a combo box with their enumerators; **Other value…** in it switches to typing any value. Integer fields accept the calculator expressions (`0x1F`, `-1`, `1 << 3`) and are truncated to the field width, typed enum values also accept enumerator names, `bool` fields accept `true`, `false`, `1` or `0`, `float` and `double` fields accept any number. `Escape` cancels. The focus stays on the edited field after `Enter`, and `Tab` / `Shift+Tab` (or `↓` / `↑` in a text field) write the value and go straight to the field of the next or previous row, so a whole structure can be typed from the keyboard. When the buffer is shorter than the structure, it is completed with zeros. Starting from an empty buffer, this builds the bytes of a structure field by field.
 
 ## Configurations
 
-The **Config** bar at the top of both views saves everything they hold under a label: the calculator (value, word size, sign, layouts, expression) and the structure decoder (declarations, data, offset, layouts, word size, buffer format) together. Type a label and press **Save** (or `Enter`): the configuration is written to `.vscode/<label>.bc` in the first workspace folder, such as `.vscode/send.bc` or `.vscode/receive.bc`; an existing label is overwritten. Picking a label in the list loads it in both views. **Reload** loads the selected one again from its file, dropping the changes made since, such as a template put in the structure. **Delete** (click twice) moves the file to the trash. The `.bc` files are plain JSON, so they can be committed with the project and shared; files added or removed by hand show up in the list. A folder must be open to save configurations.
+The **Config** bar at the top of both views saves everything they hold under a label: the calculator (value, word size, sign, layouts, expression) and the structure decoder (declarations, data, offset, layouts, word size, buffer format) together. Type a label and press **Save** (or `Enter`): the configuration is written to `.vscode/<label>.bc` in the first workspace folder, such as `.vscode/send.bc` or `.vscode/receive.bc`; an existing label is overwritten. Picking a label in the list loads it in both views. **Reload** loads the selected one again from its file, dropping the changes made since, such as a template put in the structure. **Delete** (click twice) moves the file to the trash. **↻** reads the `.vscode` folder again. The `.bc` files are plain JSON, so they can be committed with the project and shared; files added or removed by hand show up in the list. A folder must be open to save configurations.
 
 ## From the editor
 

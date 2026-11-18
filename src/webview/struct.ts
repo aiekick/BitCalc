@@ -651,13 +651,32 @@ offsetInput.addEventListener("input", () => {
   state.offset = Number.isInteger(offset) && offset >= 0 ? offset : 0;
   update();
 });
-const showEndianness = bindSegmented<Endianness>(byId("endianness"), (a_endianness) => {
-  state.endianness = a_endianness;
+/// Change the From layout keeping the values of the fields: the structure
+/// bytes of the buffer are rewritten in the new layout, so the DEC column,
+/// which holds what was typed, does not change.
+function changeSourceLayout(a_change: () => void): void {
+  const before = sourceLayout();
+  a_change();
+  if (model !== undefined && model.size > 0) {
+    const required = state.offset + model.size;
+    const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
+    bytes.set(model.allBytes);
+    const structBytes = bytes.slice(state.offset, required);
+    bytes.set(convertStruct(model.fields, structBytes, before, sourceLayout(), model.alignment), state.offset);
+    state.buffer = formatHexBytes(bytes);
+  }
   update();
+}
+
+const showEndianness = bindSegmented<Endianness>(byId("endianness"), (a_endianness) => {
+  changeSourceLayout(() => {
+    state.endianness = a_endianness;
+  });
 });
 const showBitOrder = bindSegmented<BitOrder>(byId("bitOrder"), (a_order) => {
-  state.bitOrder = a_order;
-  update();
+  changeSourceLayout(() => {
+    state.bitOrder = a_order;
+  });
 });
 const showTargetEndianness = bindSegmented<Endianness>(byId("targetEndianness"), (a_endianness) => {
   state.targetEndianness = a_endianness;

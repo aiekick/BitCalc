@@ -4,6 +4,20 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.27] - 2026-11-18
+
+### Changed
+
+- Struct Decoder: changing the **From** byte order or bit numbering keeps the values of the fields (the DEC column, which holds what was typed) and rewrites the structure bytes of the buffer in the new layout, instead of reading the same bytes again with it.
+
+### Added
+
+- Config bar: **↻** reads the `.vscode` folder again.
+
+### Fixed
+
+- Config bar: the list could stay on "(none saved)" when the folder was read after the view was built; the list is now sent again once the view is ready and each time it is shown.
+
 ## [0.0.26] - 2026-11-18
 
 ### Changed
