@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.21] - 2026-11-18
+
+### Added
+
+- Config bar: **Reload** loads the selected configuration again from its file, dropping the changes made since (a template put in the structure, edited values...).
+
 ## [0.0.20] - 2026-11-18
 
 ### Added

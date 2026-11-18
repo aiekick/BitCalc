@@ -112,7 +112,7 @@ The **DEC** column can be edited: type a value and press `Enter`, the buffer and
 
 ## Configurations
 
-The **Config** bar at the top of both views saves everything they hold under a label: the calculator (value, word size, sign, layouts, expression) and the structure decoder (declarations, data, offset, layouts, word size, buffer format) together. Type a label and press **Save** (or `Enter`): the configuration is written to `.vscode/<label>.bc` in the first workspace folder, such as `.vscode/send.bc` or `.vscode/receive.bc`; an existing label is overwritten. Picking a label in the list loads it in both views. **Delete** (click twice) moves the file to the trash. The `.bc` files are plain JSON, so they can be committed with the project and shared; files added or removed by hand show up in the list. A folder must be open to save configurations.
+The **Config** bar at the top of both views saves everything they hold under a label: the calculator (value, word size, sign, layouts, expression) and the structure decoder (declarations, data, offset, layouts, word size, buffer format) together. Type a label and press **Save** (or `Enter`): the configuration is written to `.vscode/<label>.bc` in the first workspace folder, such as `.vscode/send.bc` or `.vscode/receive.bc`; an existing label is overwritten. Picking a label in the list loads it in both views. **Reload** loads the selected one again from its file, dropping the changes made since, such as a template put in the structure. **Delete** (click twice) moves the file to the trash. The `.bc` files are plain JSON, so they can be committed with the project and shared; files added or removed by hand show up in the list. A folder must be open to save configurations.
 
 ## From the editor
 
