@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.39] - 2026-11-18
+
+### Changed
+
+- Packaging: the images the readme links to are no longer shipped in the package, since the packaged readme loads them from the repository (unless package.json uses them, like the icon): 52 KiB instead of 237 KiB.
+
 ## [0.0.38] - 2026-11-18
 
 ### Fixed

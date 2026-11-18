@@ -187,6 +187,19 @@ filesToInclude.forEach(([sourceName, entryName]) => {
 // the readme from the package: like vsce, relative image links are made
 // absolute on the repository (raw files of its default branch). The readme
 // of the repository itself keeps its relative links.
+// Relative image links of a readme, as package paths ("medias/a.png")
+function relativeReadmeImages(aText) {
+    const links = [];
+    const isRelative = (aLink) => !/^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(aLink);
+    for (const match of aText.matchAll(/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)|<img\b[^>]*\bsrc="([^"]+)"/gi)) {
+        const link = match[1] || match[2];
+        if (isRelative(link)) {
+            links.push(link.replace(/^\.\//, '').replace(/^\//, ''));
+        }
+    }
+    return links;
+}
+
 function absoluteReadmeImages(aText, aRepositoryUrl) {
     if (!aRepositoryUrl) {
         return aText;
@@ -201,17 +214,6 @@ function absoluteReadmeImages(aText, aRepositoryUrl) {
             (aMatch, aStart, aLink, aEnd) => (isRelative(aLink) ? `${aStart}${absolute(aLink)}${aEnd}` : aMatch));
 }
 
-{
-    const packageRepository = typeof packageJson.repository === 'string'
-        ? packageJson.repository
-        : packageJson.repository && packageJson.repository.url;
-    for (const [entryName, content] of extensionFiles) {
-        if (entryName.toLowerCase() === 'readme.md') {
-            extensionFiles.set(entryName, Buffer.from(absoluteReadmeImages(content.toString('utf8'), packageRepository), 'utf8'));
-        }
-    }
-}
-
 foldersToInclude.forEach(folderName => {
     const folderPath = path.join(projectRoot, folderName);
     if (fs.existsSync(folderPath) && fs.lstatSync(folderPath).isDirectory()) {
@@ -220,6 +222,26 @@ foldersToInclude.forEach(folderName => {
         console.warn(`Warning: the folder '${folderName}' does not exist or is not a directory.`);
     }
 });
+
+{
+    const packageRepository = typeof packageJson.repository === 'string'
+        ? packageJson.repository
+        : packageJson.repository && packageJson.repository.url;
+    const readmeName = Array.from(extensionFiles.keys()).find((aName) => aName.toLowerCase() === 'readme.md');
+    if (readmeName && packageRepository) {
+        const readme = extensionFiles.get(readmeName).toString('utf8');
+        extensionFiles.set(readmeName, Buffer.from(absoluteReadmeImages(readme, packageRepository), 'utf8'));
+        // The images are loaded from the repository: no need to ship them,
+        // unless package.json uses them (icon, gallery...)
+        const manifest = JSON.stringify(packageJson);
+        for (const image of relativeReadmeImages(readme)) {
+            if (extensionFiles.has(image) && !manifest.includes(image)) {
+                extensionFiles.delete(image);
+            }
+        }
+    }
+}
+
 
 // ------------------------------------------------------------
 // [Content_Types].xml: one entry per file extension in the package
