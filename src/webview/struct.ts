@@ -797,15 +797,25 @@ function wordSummaryRow(a_model: IModel, a_field: IDecodedField): string[] | und
 
 /// Rows of the field table as text, as copied by the export buttons.
 function tableRows(a_model: IModel): string[][] {
-  return a_model.decoded.flatMap((a_field, a_index) => [[
-    ...[
-      ...placementCells(a_field),
-      fieldLabel(a_field),
-      a_field.typeName,
-      a_field.raw === undefined ? "—" : displayValue(a_field)
-    ].filter((_, a_column) => isShown(FIXED_KEYS[a_column])),
-    ...valueCells(a_model, a_field, a_model.decodedTo[a_index]).map((a_cell) => a_cell.text)
-  ], ...[wordSummaryRow(a_model, a_field)].filter((a_row): a_row is string[] => a_row !== undefined)]);
+  const visible = [...FIXED_KEYS, ...optionalKeys()].filter(isShown);
+  return a_model.decoded.flatMap((a_field, a_index) => {
+    const row = [
+      ...[
+        ...placementCells(a_field),
+        fieldLabel(a_field),
+        a_field.typeName,
+        a_field.raw === undefined ? "—" : displayValue(a_field)
+      ].filter((_, a_column) => isShown(FIXED_KEYS[a_column])),
+      ...valueCells(a_model, a_field, a_model.decodedTo[a_index]).map((a_cell) => a_cell.text)
+    ];
+    const summary = wordSummaryRow(a_model, a_field);
+    if (summary === undefined) {
+      return [row];
+    }
+    // The word row gives the values of the word: not repeated on the last
+    // field of the word
+    return [row.map((a_cell, a_column) => (visible[a_column] === "wordFrom" || visible[a_column] === "wordTo" ? "" : a_cell)), summary];
+  });
 }
 
 /// Headers and alignments of the exported table.
