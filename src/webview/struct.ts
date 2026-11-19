@@ -58,12 +58,16 @@ interface IStructState {
   /// or From and To with the number of each bit in their convention
   /// ("numbered")
   binView: BinView;
+  /// byte grid: each word most significant byte first ("word") or the bytes
+  /// in memory order ("memory")
+  gridOrder: GridOrder;
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
 }
 
 type NameMode = "path" | "name";
 type BinView = "value" | "numbered";
+type GridOrder = "word" | "memory";
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
 
@@ -82,6 +86,7 @@ const state: IStructState = {
   nameMode: "path",
   folded: [],
   binView: "value",
+  gridOrder: "word",
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -97,6 +102,7 @@ state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 state.binView = oneOf(state.binView, ["value", "numbered"], "value");
+state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
 state.folded = Array.isArray(state.folded) ? state.folded.filter((a_name) => typeof a_name === "string") : [];
 const saveState = createStateSaver(api);
 
@@ -190,7 +196,11 @@ byId("app").innerHTML = `
     <summary class="section-title" id="conversionTitle"></summary>
     <div class="pane-header">
       <span class="copy-group">
-        <button id="copyGridMarkdown" title="Copy the byte by byte comparison as a Markdown table, one line per word; the bytes that differ between From and To in bold">Markdown</button><button id="copyGridCppComment" title="Copy the byte by byte comparison as a C++ comment (// lines), one line per word; the bytes that differ between From and To marked with *">C++ comment</button>
+        <span class="layout-label" title="Order of the bytes in the grid and its exports">Order</span>
+        <div class="segmented" id="gridOrder" title="Word: each word most significant byte first, so it reads as its value (+3 +2 +1 +0 in little endian). Memory: the bytes in memory order, +0 +1 +2 +3, as the buffer in bytes">
+          <button data-value="word">Word</button><button data-value="memory">Memory</button>
+        </div>
+        <button id="copyGridMarkdown" title="Copy the byte by byte comparison as text in a Markdown block, laid out like the grid, with the value of each word; the bytes that differ between From and To marked with *">Markdown</button><button id="copyGridCppComment" title="Copy the byte by byte comparison as a C++ comment (// lines), laid out like the grid, with the value of each word; the bytes that differ between From and To marked with *">C++ comment</button>
       </span>
     </div>
     <div class="table-wrap"><table class="byte-grid" id="byteGrid"></table></div>
@@ -198,7 +208,7 @@ byId("app").innerHTML = `
       <span><span class="swatch changed">A0</span> byte that differs between From and To at this offset: the conversion moved or changed it</span>
       <span><span class="swatch">45</span> same byte in both layouts</span>
       <span><span class="swatch missing">--</span> missing in the From buffer, read as 0</span>
-      <span>+n: offset of the byte in memory; a little endian word reads +3 +2 +1 +0, a big endian one +0 +1 +2 +3</span>
+      <span>+n: offset of the byte in memory; in Word order a little endian word reads +3 +2 +1 +0, a big endian one +0 +1 +2 +3</span>
     </div>
     </details>
   </section>
@@ -696,7 +706,7 @@ function renderFields(a_model: IModel): void {
 
 function renderConversion(a_model: IModel): void {
   dataTitle.textContent = `Data of ${a_model.name ?? "the structure"} (${a_model.size} bytes)`;
-  conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}, each word most significant byte first`;
+  conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}, ${gridOrderText()}`;
   // The From buffer shows the bytes up to the end of the structure, as the
   // To buffer does; bytes after it are kept but not shown, and dropped as
   // soon as the From buffer is edited.
@@ -765,6 +775,7 @@ interface IGridCell {
 
 interface IGridSide {
   readonly label: string;
+  readonly endianness: Endianness;
   readonly cells: IGridCell[];
 }
 
@@ -785,7 +796,7 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
     lines.push(sides.map((a_side) => {
       const cells: IGridCell[] = [];
       for (let word = firstWord; word < lastWord; word++) {
-        wordOrder(word, wordBytes, a_side.endianness).forEach((a_offset, a_index) => {
+        wordOrder(word, wordBytes, state.gridOrder === "memory" ? "big" : a_side.endianness).forEach((a_offset, a_index) => {
           if (a_offset >= a_model.size) {
             return;
           }
@@ -799,7 +810,7 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
           });
         });
       }
-      return { label: a_side.label, cells };
+      return { label: a_side.label, endianness: a_side.endianness, cells };
     }));
   }
   return lines;
@@ -838,7 +849,14 @@ function gridText(a_model: IModel): string {
       } else if (a_index === 0) {
         text += " ";
       }
-      word.push(a_cell.byte === "--" ? "??" : a_cell.byte);
+      // the value is written most significant byte first whatever the order
+      // of the grid
+      const byte = a_cell.byte === "--" ? "??" : a_cell.byte;
+      if (state.gridOrder === "memory" && a_side.endianness === "little") {
+        word.unshift(byte);
+      } else {
+        word.push(byte);
+      }
     });
     flush(true);
     return text.trimEnd();
@@ -859,8 +877,12 @@ function gridText(a_model: IModel): string {
   return out.join("\n");
 }
 
+function gridOrderText(): string {
+  return state.gridOrder === "memory" ? "bytes in memory order" : "each word most significant byte first";
+}
+
 function gridTitle(a_model: IModel): string {
-  return `${a_model.name ?? "Structure"}, byte by byte: ${layoutName(sourceLayout())} -> ${layoutName(targetLayout())}, each word most significant byte first (* = differs between From and To)`;
+  return `${a_model.name ?? "Structure"}, byte by byte: ${layoutName(sourceLayout())} -> ${layoutName(targetLayout())}, ${gridOrderText()} (* = differs between From and To)`;
 }
 
 function gridMarkdown(a_model: IModel): string {
@@ -1029,6 +1051,12 @@ const showBinView = bindSegmented<BinView>(byId("binView"), (a_view) => {
   update();
 });
 showBinView(state.binView);
+
+const showGridOrder = bindSegmented<GridOrder>(byId("gridOrder"), (a_order) => {
+  state.gridOrder = a_order;
+  update();
+});
+showGridOrder(state.gridOrder);
 
 const showNameMode = bindSegmented<NameMode>(byId("nameMode"), (a_mode) => {
   state.nameMode = a_mode;
