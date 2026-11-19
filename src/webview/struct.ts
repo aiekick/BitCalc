@@ -816,6 +816,33 @@ function gridText(a_model: IModel): string {
   const labelWidth = Math.max(...lines.flat().map((a_side) => a_side.label.length));
   const row = (a_label: string, a_texts: string[], a_side: IGridSide): string =>
     (a_label.padEnd(labelWidth) + a_texts.map((a_text, a_index) => (a_side.cells[a_index].wordStart ? "  " : " ") + a_text.padEnd(width)).join("")).trimEnd();
+  // Value of each word, as the words formats of the buffers show it: the
+  // bytes of the word as laid out (most significant first) after 0x; it
+  // starts under the first byte of its word
+  const values = (a_side: IGridSide): string => {
+    let text = "".padEnd(labelWidth);
+    let word: string[] = [];
+    const flush = (a_last: boolean): void => {
+      if (word.length > 0) {
+        const value = `= 0x${word.join("")}`;
+        text += value.padEnd(word.length * (width + 1) - 1);
+      }
+      word = [];
+      if (!a_last) {
+        text += "  ";
+      }
+    };
+    a_side.cells.forEach((a_cell, a_index) => {
+      if (a_cell.wordStart) {
+        flush(false);
+      } else if (a_index === 0) {
+        text += " ";
+      }
+      word.push(a_cell.byte === "--" ? "??" : a_cell.byte);
+    });
+    flush(true);
+    return text.trimEnd();
+  };
   const out: string[] = [];
   lines.forEach((a_line, a_index) => {
     if (a_index > 0) {
@@ -824,7 +851,8 @@ function gridText(a_model: IModel): string {
     for (const side of a_line) {
       out.push(
         row("", side.cells.map((a_cell) => a_cell.offset), side),
-        row(side.label, side.cells.map((a_cell) => a_cell.byte + (a_cell.changed ? "*" : "")), side)
+        row(side.label, side.cells.map((a_cell) => a_cell.byte + (a_cell.changed ? "*" : "")), side),
+        values(side)
       );
     }
   });

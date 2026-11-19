@@ -8,7 +8,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
-- Struct Decoder: **Markdown** and **C++ comment** exports of the Byte by byte comparison, laid out like the grid: for From and for To, a line of offsets and the bytes, each word most significant byte first, all the words on one line; the bytes that differ between From and To are marked with `*` (the Markdown export is a text block).
+- Struct Decoder: **Markdown** and **C++ comment** exports of the Byte by byte comparison, laid out like the grid: for From and for To, a line of offsets and the bytes, each word most significant byte first, all the words on one line; the bytes that differ between From and To are marked with `*`, and a line under the bytes gives the value of each word (`= 0x00000345`), as the buffers show it in the words formats (the Markdown export is a text block).
 
 ## [0.0.1] - 2026-11-18
 
