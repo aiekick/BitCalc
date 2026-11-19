@@ -805,16 +805,12 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
   return lines;
 }
 
-/// Words per line of the exports: 16 bytes, at least one word.
-function exportWordsPerLine(): number {
-  return Math.max(1, Math.floor(16 / Math.max(1, state.wordBits / 8)));
-}
-
 /// The byte grid as text, laid out as on screen: for each side a line of
 /// offsets and the bytes, followed by * when they differ between From and
 /// To. Every cell has the same width.
 function gridText(a_model: IModel): string {
-  const lines = gridLines(a_model, exportWordsPerLine());
+  // All the words on one line: a comment is read in an editor, not wrapped
+  const lines = gridLines(a_model, Math.max(1, Math.ceil(a_model.size / Math.max(1, state.wordBits / 8))));
   const cells = lines.flat().flatMap((a_side) => a_side.cells);
   const width = Math.max(3, ...cells.map((a_cell) => Math.max(a_cell.offset.length, a_cell.byte.length + 1)));
   const labelWidth = Math.max(...lines.flat().map((a_side) => a_side.label.length));
