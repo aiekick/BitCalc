@@ -4,6 +4,13 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.3] - 2026-11-19
+
+### Changed
+
+- Readme and help: the array syntax and the forms not supported yet (array size given by a constant or an expression, several dimensions, structure defined in a field declaration, typedefs of arrays) are documented.
+- Changelog and readme: the Word From / Word To values and the word values of the byte grid exports are read in the byte order of their layout (the 0.0.2 entry said they matched the words formats of the buffers, which group the bytes as they are).
+
 ## [0.0.2] - 2026-11-19
 
 ### Added

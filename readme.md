@@ -86,7 +86,15 @@ Enumerators take a number or an expression that may use earlier enumerators (`KI
 
 The **Template…** list above the structure replaces it with a ready-made one: an empty structure, a bitfields example, an enum with nested structures, the IPv4 and UDP headers, an RGB565 pixel, the fields of an IEEE 754 float and double. Templates written for a given byte order or bit numbering (the network headers are big endian and MSB0) also switch these options. `Ctrl+Z` in the structure brings back what was there before. The **?** button next to it shows the supported types, the syntax and the layout rules.
 
-Known types: `uint8` to `uint64` and `int8` to `int64` (also written `u8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). The `_t` names (`uint32_t`...) are not used: write `uint32`, the error message gives the name to use. `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Typedefs of arrays, pointers, unions and structures defined inside another one are not supported: declare the structures before.
+Known types: `uint8` to `uint64` and `int8` to `int64` (also written `u8`, `i8`, `s8`...), `char`, `unsigned char`, `byte`, `short`, `int`, `unsigned`, `long long` and their `signed` / `unsigned` forms, `bool`, `float`, `double` (also `f32`, `f64`, `float32`, `float64`). The `_t` names (`uint32_t`...) are not used: write `uint32`, the error message gives the name to use. `long` is refused because its size depends on the platform. `const`, `volatile` and `std::` are ignored. Arrays take a number of elements and can hold scalars, enums or structures (`Header items[3];`, shown as `items[0].type`, `items[1].type`...); each structure element starts a word.
+
+Not supported yet, to be added on request:
+
+- an array size given by a constant or an expression: `P items[N]` (enumerator or `#define`), `P items[2 * 2]`;
+- arrays of several dimensions: `P items[2][3]`;
+- a structure defined in the declaration of a field: `struct { uint8 a; } items[2];` inside another structure (declare the structure before);
+- typedefs of arrays: `typedef P PArr[2];`;
+- pointers and unions.
 
 **Data**: the view reads from top to bottom: the declarations, the field table of the decoded structure, then the **Data of <structure>** section holding the bytes it is decoded from. They are written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`; **Offset** skips the given number of bytes before the structure. The From buffer always covers the whole structure, as the To buffer does: when it is shorter, it is completed with zeros as soon as it is not being typed in (while typing, both titles say how many bytes are missing). Both buffers stop at the end of the structure; bytes after it, left by a larger structure or a longer paste, are kept but not shown (the From label gives their count) and dropped as soon as the From buffer is edited.
 

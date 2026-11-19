@@ -80,7 +80,8 @@ export function buildStructHelp(): HTMLElement {
       "A plain list of fields, without braces, is accepted too.",
       "Declare enums and structures before or after their use; the list above the field table picks the structure to decode.",
       "An enum value is shown as NAME (value); type a name, a value or an expression to change it.",
-      "Pointers, unions and structures defined inside another one are not supported."
+      "Arrays: a number of elements (P items[3]); not supported yet: a size given by a constant or an expression (items[N], items[2 * 2]), several dimensions (items[2][3]), typedefs of arrays.",
+      "Pointers, unions and structures defined inside another one are not supported: declare the structures before."
     ])),
     section("Layout (ICD, no compiler rule)", list([
       "The message is a sequence of words of the size chosen with Word (32 bits by default).",
