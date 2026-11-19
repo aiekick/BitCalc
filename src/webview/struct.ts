@@ -200,7 +200,7 @@ byId("app").innerHTML = `
         <div class="segmented" id="gridOrder" title="Word: each word most significant byte first, so it reads as its value (+3 +2 +1 +0 in little endian). Memory: the bytes in memory order, +0 +1 +2 +3, as the buffer in bytes">
           <button data-value="word">Word</button><button data-value="memory">Memory</button>
         </div>
-        <button id="copyGridMarkdown" title="Copy the byte by byte comparison as text in a Markdown block, laid out like the grid, with the value of each word; the bytes that differ between From and To marked with *">Markdown</button><button id="copyGridCppComment" title="Copy the byte by byte comparison as a C++ comment (// lines), laid out like the grid, with the value of each word; the bytes that differ between From and To marked with *">C++ comment</button>
+        <button id="copyGridMarkdown" title="Copy the byte by byte comparison as text in a Markdown block, laid out like the grid, with the value of each word">Markdown</button><button id="copyGridCppComment" title="Copy the byte by byte comparison as a C++ comment (// lines), laid out like the grid, with the value of each word">C++ comment</button>
       </span>
     </div>
     <div class="table-wrap"><table class="byte-grid" id="byteGrid"></table></div>
@@ -817,13 +817,13 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
 }
 
 /// The byte grid as text, laid out as on screen: for each side a line of
-/// offsets and the bytes, followed by * when they differ between From and
-/// To. Every cell has the same width.
+/// offsets, the bytes and the value of each word. Every cell has the same
+/// width.
 function gridText(a_model: IModel): string {
   // All the words on one line: a comment is read in an editor, not wrapped
   const lines = gridLines(a_model, Math.max(1, Math.ceil(a_model.size / Math.max(1, state.wordBits / 8))));
   const cells = lines.flat().flatMap((a_side) => a_side.cells);
-  const width = Math.max(3, ...cells.map((a_cell) => Math.max(a_cell.offset.length, a_cell.byte.length + 1)));
+  const width = Math.max(3, ...cells.map((a_cell) => Math.max(a_cell.offset.length, a_cell.byte.length)));
   const labelWidth = Math.max(...lines.flat().map((a_side) => a_side.label.length));
   const row = (a_label: string, a_texts: string[], a_side: IGridSide): string =>
     (a_label.padEnd(labelWidth) + a_texts.map((a_text, a_index) => (a_side.cells[a_index].wordStart ? "  " : " ") + a_text.padEnd(width)).join("")).trimEnd();
@@ -869,7 +869,7 @@ function gridText(a_model: IModel): string {
     for (const side of a_line) {
       out.push(
         row("", side.cells.map((a_cell) => a_cell.offset), side),
-        row(side.label, side.cells.map((a_cell) => a_cell.byte + (a_cell.changed ? "*" : "")), side),
+        row(side.label, side.cells.map((a_cell) => a_cell.byte), side),
         values(side)
       );
     }
@@ -882,7 +882,7 @@ function gridOrderText(): string {
 }
 
 function gridTitle(a_model: IModel): string {
-  return `${a_model.name ?? "Structure"}, byte by byte: ${layoutName(sourceLayout())} -> ${layoutName(targetLayout())}, ${gridOrderText()} (* = differs between From and To)`;
+  return `${a_model.name ?? "Structure"}, byte by byte: ${layoutName(sourceLayout())} -> ${layoutName(targetLayout())}, ${gridOrderText()}`;
 }
 
 function gridMarkdown(a_model: IModel): string {
