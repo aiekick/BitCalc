@@ -4,23 +4,11 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [0.0.4] - 2026-11-19
-
-### Changed
-
-- Byte by byte: a line of bit numbers under the bytes of each side, in the numbering of its layout. The Markdown and C++ comment exports use the same layout as the grid (offsets, bytes, bit numbers for each side, 16 bytes per line, differing bytes marked with `*`), the Markdown one in a text block.
-
-## [0.0.3] - 2026-11-19
-
-### Added
-
-- Byte by byte exports: a Bits column for From and for To giving the bit numbers of each byte in its layout (`31..24 23..16 15..8 7..0` in LSB0, `0..7 8..15 16..23 24..31` in MSB0).
-
 ## [0.0.2] - 2026-11-19
 
 ### Added
 
-- Struct Decoder: **Markdown** and **C++ comment** exports of the Byte by byte comparison: one line per word with the From and To bytes, most significant byte first, and their offsets; the bytes that differ between From and To are in bold (Markdown) or marked with `*` (C++).
+- Struct Decoder: **Markdown** and **C++ comment** exports of the Byte by byte comparison, laid out like the grid: for From and for To, a line of offsets and the bytes, each word most significant byte first, 16 bytes per line; the bytes that differ between From and To are marked with `*` (the Markdown export is a text block).
 
 ## [0.0.1] - 2026-11-18
 

@@ -753,12 +753,10 @@ function renderByteGrid(a_model: IModel): void {
 }
 
 /// Offsets of a word in the reading order of a_endianness.
-/// One cell of a byte grid line: the byte of a word, its offset in memory
-/// and the bit numbers it holds in the numbering of its layout.
+/// One cell of a byte grid line: the byte of a word and its offset in memory.
 interface IGridCell {
   readonly offset: string;
   readonly byte: string;
-  readonly bits: string;
   readonly changed: boolean;
   readonly missing: boolean;
   /// first byte of a word other than the first of the line
@@ -767,7 +765,6 @@ interface IGridCell {
 
 interface IGridSide {
   readonly label: string;
-  readonly bitsLabel: string;
   readonly cells: IGridCell[];
 }
 
@@ -775,19 +772,12 @@ interface IGridSide {
 /// the From side then the To side, each word most significant byte first.
 function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
   const wordBytes = Math.max(1, state.wordBits / 8);
-  const wordBits = wordBytes * 8;
   const words = Math.ceil(a_model.size / wordBytes);
   const fromAt = (a_offset: number): number | undefined => (a_offset < a_model.bytes.length ? a_model.bytes[a_offset] : undefined);
   const toAt = (a_offset: number): number | undefined => a_model.converted[a_offset];
-  // Bit numbers of the byte shown at a_index of its word, most significant
-  // byte first, from the most significant bit of the byte to the least
-  const byteBits = (a_index: number, a_order: BitOrder): string => {
-    const high = wordBits - 1 - a_index * 8;
-    return a_order === "lsb0" ? `${high}..${high - 7}` : `${wordBits - 1 - high}..${wordBits - high + 6}`;
-  };
   const sides = [
-    { label: `From ${layoutName(sourceLayout())}`, order: state.bitOrder, endianness: state.endianness, at: fromAt, other: toAt, missing: true },
-    { label: `To ${layoutName(targetLayout())}`, order: state.targetBitOrder, endianness: state.targetEndianness, at: toAt, other: fromAt, missing: false }
+    { label: `From ${layoutName(sourceLayout())}`, endianness: state.endianness, at: fromAt, other: toAt, missing: true },
+    { label: `To ${layoutName(targetLayout())}`, endianness: state.targetEndianness, at: toAt, other: fromAt, missing: false }
   ];
   const lines: IGridSide[][] = [];
   for (let firstWord = 0; firstWord < words; firstWord += a_wordsPerRow) {
@@ -803,14 +793,13 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
           cells.push({
             offset: `+${a_offset}`,
             byte: value === undefined ? "--" : hex2(value),
-            bits: byteBits(a_index, a_side.order),
             changed: value !== a_side.other(a_offset),
             missing: value === undefined && a_side.missing,
             wordStart: a_index === 0 && word > firstWord
           });
         });
       }
-      return { label: a_side.label, bitsLabel: `bits ${a_side.order.toUpperCase()}`, cells };
+      return { label: a_side.label, cells };
     }));
   }
   return lines;
@@ -822,13 +811,13 @@ function exportWordsPerLine(): number {
 }
 
 /// The byte grid as text, laid out as on screen: for each side a line of
-/// offsets, the bytes (followed by * when they differ between From and To)
-/// and the bit numbers of each byte. Every cell has the same width.
+/// offsets and the bytes, followed by * when they differ between From and
+/// To. Every cell has the same width.
 function gridText(a_model: IModel): string {
   const lines = gridLines(a_model, exportWordsPerLine());
   const cells = lines.flat().flatMap((a_side) => a_side.cells);
-  const width = Math.max(3, ...cells.map((a_cell) => Math.max(a_cell.offset.length, a_cell.byte.length + 1, a_cell.bits.length)));
-  const labelWidth = Math.max(...lines.flat().flatMap((a_side) => [a_side.label.length, a_side.bitsLabel.length]));
+  const width = Math.max(3, ...cells.map((a_cell) => Math.max(a_cell.offset.length, a_cell.byte.length + 1)));
+  const labelWidth = Math.max(...lines.flat().map((a_side) => a_side.label.length));
   const row = (a_label: string, a_texts: string[], a_side: IGridSide): string =>
     (a_label.padEnd(labelWidth) + a_texts.map((a_text, a_index) => (a_side.cells[a_index].wordStart ? "  " : " ") + a_text.padEnd(width)).join("")).trimEnd();
   const out: string[] = [];
@@ -839,8 +828,7 @@ function gridText(a_model: IModel): string {
     for (const side of a_line) {
       out.push(
         row("", side.cells.map((a_cell) => a_cell.offset), side),
-        row(side.label, side.cells.map((a_cell) => a_cell.byte + (a_cell.changed ? "*" : "")), side),
-        row(side.bitsLabel, side.cells.map((a_cell) => a_cell.bits), side)
+        row(side.label, side.cells.map((a_cell) => a_cell.byte + (a_cell.changed ? "*" : "")), side)
       );
     }
   });
@@ -870,18 +858,15 @@ function drawByteGrid(a_model: IModel, a_wordsPerRow: number): void {
     for (const side of line) {
       const header = createElement("tr", "byte-grid-offsets");
       const row = createElement("tr", "byte-grid-bytes");
-      const bits = createElement("tr", "byte-grid-bitnumbers");
       header.append(createElement("th"));
       row.append(createElement("th", undefined, side.label));
-      bits.append(createElement("th", undefined, side.bitsLabel));
       for (const cell of side.cells) {
         const start = cell.wordStart ? "word-start" : undefined;
         header.append(createElement("th", start, cell.offset));
         const classes = [cell.missing ? "missing" : "", cell.changed ? "changed" : "", start ?? ""].filter((a_class) => a_class !== "").join(" ");
         row.append(createElement("td", classes || undefined, cell.byte));
-        bits.append(createElement("td", start, cell.bits));
       }
-      byteGrid.append(header, row, bits);
+      byteGrid.append(header, row);
     }
   }
 }

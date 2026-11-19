@@ -184,5 +184,3 @@ details.fold > summary:hover { opacity: 1; }
 .bin-bit { cursor: help; }
 .bin-bit:hover { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .bin-range { display: block; font-size: 0.75em; opacity: 0.6; }
-.byte-grid-bitnumbers th, .byte-grid-bitnumbers td { font-size: 0.7em; opacity: 0.55; padding-bottom: 4px; }
-.byte-grid-bitnumbers th { text-align: left; }
