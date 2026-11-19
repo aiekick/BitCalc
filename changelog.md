@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.4] - 2026-11-19
+
+### Changed
+
+- Byte by byte: a line of bit numbers under the bytes of each side, in the numbering of its layout. The Markdown and C++ comment exports use the same layout as the grid (offsets, bytes, bit numbers for each side, 16 bytes per line, differing bytes marked with `*`), the Markdown one in a text block.
+
 ## [0.0.3] - 2026-11-19
 
 ### Added
