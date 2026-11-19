@@ -753,35 +753,47 @@ function renderByteGrid(a_model: IModel): void {
 }
 
 /// Offsets of a word in the reading order of a_endianness.
-/// Rows of the byte by byte export, one per word: the From bytes and their
-/// offsets, then the To bytes and theirs, each word most significant byte
-/// first. a_mark decorates a byte that differs between From and To.
+/// Rows of the byte by byte export, one per word: the From bytes, their
+/// offsets and their bit numbers, then the same for To, each word most
+/// significant byte first. a_mark decorates a byte that differs between
+/// From and To.
 function gridExportRows(a_model: IModel, a_mark: (a_byte: string) => string): string[][] {
   const wordBytes = Math.max(1, state.wordBits / 8);
   const words = Math.ceil(a_model.size / wordBytes);
   const fromAt = (a_offset: number): number | undefined => (a_offset < a_model.bytes.length ? a_model.bytes[a_offset] : undefined);
   const toAt = (a_offset: number): number | undefined => a_model.converted[a_offset];
-  const side = (a_word: number, a_endianness: Endianness, a_at: (a_offset: number) => number | undefined, a_other: (a_offset: number) => number | undefined): string[] => {
+  const wordBits = wordBytes * 8;
+  // Bit numbers of the byte shown at a_index (most significant byte first)
+  // in a_order: from the most significant bit of the byte to the least
+  const byteBits = (a_index: number, a_order: BitOrder): string => {
+    const high = wordBits - 1 - a_index * 8;
+    return a_order === "lsb0" ? `${high}..${high - 7}` : `${wordBits - 1 - high}..${wordBits - 1 - high + 7}`;
+  };
+  const side = (a_word: number, a_endianness: Endianness, a_order: BitOrder, a_at: (a_offset: number) => number | undefined, a_other: (a_offset: number) => number | undefined): string[] => {
     const offsets = wordOrder(a_word, wordBytes, a_endianness).filter((a_offset) => a_offset < a_model.size);
     const bytes = offsets.map((a_offset) => {
       const value = a_at(a_offset);
       const text = value === undefined ? "--" : hex2(value);
       return value !== a_other(a_offset) ? a_mark(text) : text;
     });
-    return [bytes.join(" "), offsets.map((a_offset) => `+${a_offset}`).join(" ")];
+    return [bytes.join(" "), offsets.map((a_offset) => `+${a_offset}`).join(" "), offsets.map((_, a_index) => byteBits(a_index, a_order)).join(" ")];
   };
   const rows: string[][] = [];
   for (let word = 0; word < words; word++) {
-    rows.push([String(word), ...side(word, state.endianness, fromAt, toAt), ...side(word, state.targetEndianness, toAt, fromAt)]);
+    rows.push([
+      String(word),
+      ...side(word, state.endianness, state.bitOrder, fromAt, toAt),
+      ...side(word, state.targetEndianness, state.targetBitOrder, toAt, fromAt)
+    ]);
   }
   return rows;
 }
 
 function gridExportHeaders(): string[] {
-  return ["Word", `From ${layoutName(sourceLayout())}`, "Offsets", `To ${layoutName(targetLayout())}`, "Offsets"];
+  return ["Word", `From ${layoutName(sourceLayout())}`, "Offsets", `Bits ${state.bitOrder.toUpperCase()}`, `To ${layoutName(targetLayout())}`, "Offsets", `Bits ${state.targetBitOrder.toUpperCase()}`];
 }
 
-const GRID_ALIGN: ColumnAlign[] = ["right", "left", "left", "left", "left"];
+const GRID_ALIGN: ColumnAlign[] = ["right", "left", "left", "left", "left", "left", "left"];
 
 function gridTitle(a_model: IModel): string {
   return `${a_model.name ?? "Structure"}, byte by byte: ${layoutName(sourceLayout())} -> ${layoutName(targetLayout())}, each word most significant byte first`;
@@ -798,7 +810,7 @@ function gridCppComment(a_model: IModel): string {
     if (a_index === 0) {
       return a_cell;
     }
-    const width = a_index === 1 || a_index === 3 ? 4 : offsetWidth;
+    const width = a_index === 1 || a_index === 4 ? 4 : a_index === 2 || a_index === 5 ? offsetWidth : 7;
     return a_cell.split(" ").map((a_part) => a_part.padEnd(width)).join("").trimEnd();
   }));
   return `${cppLineComment(`${gridTitle(a_model)} (* = differs between From and To)\n\n${textTable(gridExportHeaders(), rows, GRID_ALIGN)}`)}\n`;

@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.3] - 2026-11-19
+
+### Added
+
+- Byte by byte exports: a Bits column for From and for To giving the bit numbers of each byte in its layout (`31..24 23..16 15..8 7..0` in LSB0, `0..7 8..15 16..23 24..31` in MSB0).
+
 ## [0.0.2] - 2026-11-19
 
 ### Added
