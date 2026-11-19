@@ -1,4 +1,4 @@
-import { BitOrder, Endianness, formatBits, fromBytes, groupDigits } from "../utils/bits";
+import { BitOrder, Endianness, formatBits, fromBytes } from "../utils/bits";
 import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
@@ -591,8 +591,8 @@ function allColumns(): IColumn[] {
     );
   } else if (state.binView === "word") {
     columns.push(
-      { label: `BIN From word ${from}`, title: `The word of the field in From, most significant bit on the left, the bits of the field highlighted (in the exports, the other bits are dots)`, align: "right" },
-      { label: `BIN To word ${to}`, title: `The word of the field in To, most significant bit on the left, the bits of the field highlighted (in the exports, the other bits are dots)`, align: "right" }
+      { label: `BIN From word ${from}`, title: `The word of the field in From, most significant bit on the left, the bits of the field highlighted (in the exports, the bits of the field between [ ])`, align: "right" },
+      { label: `BIN To word ${to}`, title: `The word of the field in To, most significant bit on the left, the bits of the field highlighted (in the exports, the bits of the field between [ ])`, align: "right" }
     );
   } else {
     columns.push({ label: "BIN", title: "Bits of the value, most significant bit on the left, the same in From and To", align: "right" });
@@ -670,8 +670,21 @@ function wordCell(a_bytes: Uint8Array, a_word: number, a_first: number, a_last: 
     const number = a_layout.bitOrder === "lsb0" ? width - 1 - a_index : a_index;
     return number >= a_first && number <= a_last;
   });
-  const masked = Array.from(bits, (a_bit, a_index) => (inField[a_index] ? a_bit : ".")).join("");
-  return { text: groupDigits(masked, 4), word: { bits, inField } };
+  // The exports show the whole word, the bits of the field between [ ]
+  let text = "";
+  for (let index = 0; index < bits.length; index++) {
+    if (index > 0 && (bits.length - index) % 4 === 0) {
+      text += " ";
+    }
+    if (inField[index] && (index === 0 || !inField[index - 1])) {
+      text += "[";
+    }
+    text += bits[index];
+    if (inField[index] && (index === bits.length - 1 || !inField[index + 1])) {
+      text += "]";
+    }
+  }
+  return { text, word: { bits, inField } };
 }
 
 /// BIN cell of a value whose field lies on bits a_first..a_last of its word.
