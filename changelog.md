@@ -8,6 +8,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
+- Struct Decoder: **Words of To read as** choice: the words of To (words formats of the buffer, copies, Word To, word values of the exports) are read in the From byte order by default, as a program on the From machine casting the To bytes does, so that an array of words written on that machine gives exactly the bytes to send; or in their own byte order.
 - Struct Decoder: **Columns** buttons above the field table show or hide each column (Word, Bit min, Bit max, Bits, Field, Type, DEC, HEX, OCT, Mask From, Mask To, Word From, Word To, BIN From, BIN To); the exports follow the shown columns, and the choice is kept.
 - Struct Decoder: optional **Word From** and **Word To** columns (hidden by default), the hex value of the whole word in each layout, on the last row of each word, on the word size, as the buffers show it in the words formats.
 - Struct Decoder: **Mask From** and **Mask To** columns, the bits of each field in the value of its word in each layout (field = (word & mask) >> lowest bit of the mask).

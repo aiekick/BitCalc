@@ -63,6 +63,10 @@ interface IStructState {
   gridOrder: GridOrder;
   /// optional columns of the field table the user hid
   hiddenColumns: OptionalColumn[];
+  /// byte order the words of To are read in (words formats of the buffer,
+  /// Word To, values of the exports): their own ("to"), or the From one
+  /// ("from"), as a program on the From machine casting the To bytes does
+  toWordsAs: "to" | "from";
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
 }
@@ -112,6 +116,7 @@ const state: IStructState = {
   binView: "value",
   gridOrder: "word",
   hiddenColumns: ["wordFrom", "wordTo"],
+  toWordsAs: "from",
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -128,6 +133,7 @@ state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 state.binView = oneOf(state.binView, ["value", "word", "numbered"], "value");
 state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
+state.toWordsAs = oneOf(state.toWordsAs, ["to", "from"], "from");
 state.hiddenColumns = Array.isArray(state.hiddenColumns)
   ? state.hiddenColumns.filter((a_key) => OPTIONAL_COLUMNS.some((a_column) => a_column.key === a_key))
   : [];
@@ -207,6 +213,12 @@ byId("app").innerHTML = `
           <option value="words64">64-bit words</option>
         </select>
       </label>
+      <label class="offset-label" title="Byte order the words of To are read in, in the words formats, the Word To column and the word values of the exports. To: their own byte order, the value the To system sees. From: the From byte order, the value a program on the From machine gets by casting the To bytes to words (for instance uint32_t in a unit test)">Words of To read as
+        <select id="toWordsAs">
+          <option value="from">From (cast on the From machine: the bytes to send)</option>
+          <option value="to">To (their own byte order)</option>
+        </select>
+      </label>
     </div>
     <div class="pane-header">
       <label class="section-title" for="buffer" id="bufferLabel"></label>
@@ -265,6 +277,11 @@ const definitionEditor = new CodeEditor(definitionInput);
 
 function sourceLayout(): ILayoutOptions {
   return { endianness: state.endianness, bitOrder: state.bitOrder };
+}
+
+/// Byte order the words of To are read in, see IStructState.toWordsAs.
+function toWordsEndianness(): Endianness {
+  return state.toWordsAs === "from" ? state.endianness : state.targetEndianness;
 }
 
 function targetLayout(): ILayoutOptions {
@@ -701,7 +718,7 @@ function allValueCells(a_model: IModel, a_field: IDecodedField, a_to: IDecodedFi
     { text: spanning ? "—" : fieldMask(first, last, state.targetBitOrder) },
     // Once per word, on its last row
     { text: closesWord(a_model, a_field) ? wordValues(a_model.bytes, a_field, sourceLayout().endianness) : "" },
-    { text: closesWord(a_model, a_field) ? wordValues(a_model.converted, a_field, targetLayout().endianness) : "" }
+    { text: closesWord(a_model, a_field) ? wordValues(a_model.converted, a_field, toWordsEndianness()) : "" }
   );
   if (state.binView === "numbered") {
     cells.push(
@@ -879,6 +896,7 @@ function renderConversion(a_model: IModel): void {
   }
   bufferLabel.classList.toggle("warning", missing > 0);
   targetBufferLabel.textContent = `To ${layoutName(targetLayout())}`
+    + (state.toWordsAs === "from" && state.bufferFormat.startsWith("words") && state.endianness !== state.targetEndianness ? ` (words read as ${state.endianness === "little" ? "LE" : "BE"}, as cast on the From machine)` : "")
     + (missing > 0 ? ` (the whole structure: the ${missing} missing byte${missing === 1 ? "" : "s"} of From counted as 0)` : "");
   targetBufferLabel.classList.toggle("warning", missing > 0);
   if (document.activeElement !== bufferInput) {
@@ -890,7 +908,7 @@ function renderConversion(a_model: IModel): void {
     ? "01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"
     : `Hex words, e.g. ${formatBuffer([0xFA, 0x00, 0x12, 0x34], state.bufferFormat, state.endianness)}`;
   if (document.activeElement !== targetBufferInput) {
-    targetBufferInput.value = formatBuffer(a_model.converted, state.bufferFormat, state.targetEndianness);
+    targetBufferInput.value = formatBuffer(a_model.converted, state.bufferFormat, toWordsEndianness());
     targetBufferInput.classList.remove("invalid");
   }
   renderByteGrid(a_model);
@@ -932,6 +950,8 @@ interface IGridCell {
 interface IGridSide {
   readonly label: string;
   readonly endianness: Endianness;
+  /// byte order its word values are read in
+  readonly readAs: Endianness;
   readonly cells: IGridCell[];
 }
 
@@ -943,8 +963,8 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
   const fromAt = (a_offset: number): number | undefined => (a_offset < a_model.bytes.length ? a_model.bytes[a_offset] : undefined);
   const toAt = (a_offset: number): number | undefined => a_model.converted[a_offset];
   const sides = [
-    { label: `From ${layoutName(sourceLayout())}`, endianness: state.endianness, at: fromAt, other: toAt, missing: true },
-    { label: `To ${layoutName(targetLayout())}`, endianness: state.targetEndianness, at: toAt, other: fromAt, missing: false }
+    { label: `From ${layoutName(sourceLayout())}`, endianness: state.endianness, readAs: state.endianness, at: fromAt, other: toAt, missing: true },
+    { label: `To ${layoutName(targetLayout())}`, endianness: state.targetEndianness, readAs: toWordsEndianness(), at: toAt, other: fromAt, missing: false }
   ];
   const lines: IGridSide[][] = [];
   for (let firstWord = 0; firstWord < words; firstWord += a_wordsPerRow) {
@@ -966,7 +986,7 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
           });
         });
       }
-      return { label: a_side.label, endianness: a_side.endianness, cells };
+      return { label: a_side.label, endianness: a_side.endianness, readAs: a_side.readAs, cells };
     }));
   }
   return lines;
@@ -991,7 +1011,12 @@ function gridText(a_model: IModel): string {
     let word: string[] = [];
     const flush = (a_last: boolean): void => {
       if (word.length > 0) {
-        const value = `= 0x${word.join("")}`;
+        // word holds the bytes as shown: back to memory order, then read in
+        // the byte order of the side's word values, most significant first
+        const shownReversed = state.gridOrder === "word" && a_side.endianness === "little";
+        const memory = shownReversed ? [...word].reverse() : word;
+        const msbFirst = a_side.readAs === "little" ? [...memory].reverse() : memory;
+        const value = `= 0x${msbFirst.join("")}`;
         text += value.padEnd(word.length * (width + 1) - 1);
       }
       word = [];
@@ -1005,14 +1030,7 @@ function gridText(a_model: IModel): string {
       } else if (a_index === 0) {
         text += " ";
       }
-      // the value is written most significant byte first whatever the order
-      // of the grid
-      const byte = a_cell.byte === "--" ? "??" : a_cell.byte;
-      if (state.gridOrder === "memory" && a_side.endianness === "little") {
-        word.unshift(byte);
-      } else {
-        word.push(byte);
-      }
+      word.push(a_cell.byte === "--" ? "??" : a_cell.byte);
     });
     flush(true);
     return text.trimEnd();
@@ -1103,7 +1121,7 @@ targetBufferInput.addEventListener("input", () => {
   if (model === undefined) {
     return;
   }
-  const typed = parseBuffer(targetBufferInput.value, state.bufferFormat, state.targetEndianness);
+  const typed = parseBuffer(targetBufferInput.value, state.bufferFormat, toWordsEndianness());
   if (typed.error !== undefined) {
     targetBufferInput.classList.add("invalid");
     targetBufferInput.title = typed.error;
@@ -1134,6 +1152,12 @@ bufferInput.addEventListener("input", () => {
   update();
 });
 bufferInput.addEventListener("blur", () => update());
+const toWordsAsSelect = byId<HTMLSelectElement>("toWordsAs");
+toWordsAsSelect.value = state.toWordsAs;
+toWordsAsSelect.addEventListener("change", () => {
+  state.toWordsAs = oneOf(toWordsAsSelect.value, ["to", "from"], "from");
+  update();
+});
 const bufferFormatSelect = byId<HTMLSelectElement>("bufferFormat");
 bufferFormatSelect.value = state.bufferFormat;
 bufferFormatSelect.addEventListener("change", () => {
@@ -1268,7 +1292,7 @@ for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("bu
     }
     const [which, kind] = (button.dataset.copy ?? "").split("-");
     const bytes = which === "to" ? model.converted : model.bytes.subarray(0, model.size);
-    const endianness = which === "to" ? state.targetEndianness : state.endianness;
+    const endianness = which === "to" ? toWordsEndianness() : state.endianness;
     api.postMessage({
       type: "copy",
       text: kind === "c" ? formatBufferCArray(bytes, state.bufferFormat, endianness) : formatBuffer(bytes, state.bufferFormat, endianness)
