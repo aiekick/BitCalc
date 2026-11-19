@@ -3,6 +3,7 @@ import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
 import { formatDeclarations } from "../utils/structFormat";
+import { arrayMemberOf, parseIndices } from "../utils/arrayView";
 import { ColumnAlign, cppLineComment, csvTable, markdownTable, textTable } from "../utils/markdownTable";
 import {
   IDecodedField,
@@ -63,6 +64,9 @@ interface IStructState {
   gridOrder: GridOrder;
   /// optional columns of the field table the user hid
   hiddenColumns: OptionalColumn[];
+  /// arrays of structures in the field table, by path: the elements shown
+  /// ("0", "2-5", "0,1,3,6") and whether the section is open
+  arrayViews: Record<string, { indices: string; open: boolean }>;
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
 }
@@ -117,6 +121,7 @@ const state: IStructState = {
   binView: "value",
   gridOrder: "word",
   hiddenColumns: ["wordFrom", "wordTo"],
+  arrayViews: {},
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -133,6 +138,7 @@ state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 state.binView = oneOf(state.binView, ["value", "word", "numbered"], "value");
 state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
+state.arrayViews = typeof state.arrayViews === "object" && state.arrayViews !== null && !Array.isArray(state.arrayViews) ? state.arrayViews : {};
 state.hiddenColumns = Array.isArray(state.hiddenColumns)
   ? state.hiddenColumns.filter((a_key) => OPTIONAL_COLUMNS.some((a_column) => a_column.key === a_key))
   : [];
@@ -420,13 +426,19 @@ function commitAndFocus(a_commit: () => boolean | void, a_row: number): void {
 /// Tab / Shift+Tab, and the arrows in a text field, go to the DEC control of
 /// the next or previous row. Returns the row to go to, or undefined.
 function navigationTarget(a_event: KeyboardEvent, a_row: number, a_arrows: boolean): number | undefined {
-  let target: number | undefined;
+  let step: number | undefined;
   if (a_event.key === "Tab" && !a_event.ctrlKey && !a_event.altKey) {
-    target = a_event.shiftKey ? a_row - 1 : a_row + 1;
+    step = a_event.shiftKey ? -1 : 1;
   } else if (a_arrows && (a_event.key === "ArrowDown" || a_event.key === "ArrowUp") && !a_event.ctrlKey && !a_event.altKey && !a_event.shiftKey) {
-    target = a_event.key === "ArrowDown" ? a_row + 1 : a_row - 1;
+    step = a_event.key === "ArrowDown" ? 1 : -1;
   }
-  return target !== undefined && fieldsBody.querySelector(`[data-row="${target}"]`) !== null ? target : undefined;
+  if (step === undefined) {
+    return undefined;
+  }
+  // The next shown row: rows of hidden array elements are skipped
+  const rows = Array.from(fieldsBody.querySelectorAll<HTMLElement>("[data-row]"), (a_control) => Number(a_control.dataset.row));
+  const position = rows.indexOf(a_row);
+  return position < 0 ? undefined : rows[position + step];
 }
 
 /// Combo box of an enum field: its enumerators, the current value when it
@@ -798,7 +810,12 @@ function wordSummaryRow(a_model: IModel, a_field: IDecodedField): string[] | und
 /// Rows of the field table as text, as copied by the export buttons.
 function tableRows(a_model: IModel): string[][] {
   const visible = [...FIXED_KEYS, ...optionalKeys()].filter(isShown);
+  const isFieldSelected = fieldSelector(arrayCounts(a_model));
   return a_model.decoded.flatMap((a_field, a_index) => {
+    // Only the chosen elements of the arrays of structures
+    if (!isFieldSelected(a_field)) {
+      return [];
+    }
     const row = [
       ...[
         ...placementCells(a_field),
@@ -860,6 +877,90 @@ function bitNumbering(a_order: BitOrder): string {
 
 const fieldsHead = byId("fieldsHead");
 
+/// View of an array of structures: one element shown by default, open.
+function arrayView(a_path: string): { indices: string; open: boolean } {
+  const view = state.arrayViews[a_path];
+  return {
+    indices: typeof view?.indices === "string" ? view.indices : "0",
+    open: typeof view?.open === "boolean" ? view.open : true
+  };
+}
+
+/// Number of elements of each array of structures of the model.
+function arrayCounts(a_model: IModel): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const field of a_model.decoded) {
+    const member = arrayMemberOf(field.name);
+    if (member !== undefined) {
+      counts.set(member.path, Math.max(counts.get(member.path) ?? 0, member.index + 1));
+    }
+  }
+  return counts;
+}
+
+/// Test telling whether a field is shown: always, unless it is in an element
+/// of an array of structures that is not among the chosen indices. The
+/// indices of each array are read once.
+function fieldSelector(a_counts: Map<string, number>): (a_field: IDecodedField) => boolean {
+  const selections = new Map<string, ReadonlySet<number>>();
+  return (a_field) => {
+    const member = arrayMemberOf(a_field.name);
+    if (member === undefined) {
+      return true;
+    }
+    let indices = selections.get(member.path);
+    if (indices === undefined) {
+      indices = parseIndices(arrayView(member.path).indices, a_counts.get(member.path) ?? 0).indices;
+      selections.set(member.path, indices);
+    }
+    return indices.has(member.index);
+  };
+}
+
+/// Header row of the section of an array of structures: fold button, name,
+/// number of elements and the indices to show.
+function arrayHeaderRow(a_path: string, a_count: number, a_columns: number): HTMLTableRowElement {
+  const view = arrayView(a_path);
+  const selection = parseIndices(view.indices, a_count);
+  const row = createElement("tr", "array-header");
+  const cell = createElement("td");
+  cell.colSpan = a_columns;
+  const toggle = createElement("button", "array-toggle", view.open ? "▾" : "▸");
+  toggle.title = view.open ? "Fold the elements" : "Unfold the elements";
+  toggle.addEventListener("click", () => {
+    state.arrayViews = { ...state.arrayViews, [a_path]: { ...view, open: !view.open } };
+    update();
+  });
+  const label = createElement("span", "array-label", `${a_path}[${a_count}]`);
+  const indicesLabel = createElement("label", "array-indices", "Indices ");
+  const input = createElement("input", "array-indices-input");
+  input.value = view.indices;
+  input.spellcheck = false;
+  input.placeholder = "0, 2-5, 0,1,3,6";
+  input.title = "Elements to show: an index (0), a range (2-5 or 2..5) or a list (0,1,3,6); Enter applies";
+  if (selection.error !== undefined) {
+    input.classList.add("invalid");
+    input.title = selection.error;
+  }
+  const apply = (): void => {
+    if (input.value !== view.indices) {
+      state.arrayViews = { ...state.arrayViews, [a_path]: { ...view, indices: input.value } };
+      update();
+    }
+  };
+  input.addEventListener("keydown", (a_event) => {
+    if (a_event.key === "Enter") {
+      apply();
+    }
+  });
+  input.addEventListener("blur", apply);
+  indicesLabel.append(input);
+  const shown = createElement("span", "array-shown", `${selection.indices.size} of ${a_count} shown`);
+  cell.append(toggle, label, indicesLabel, shown);
+  row.append(cell);
+  return row;
+}
+
 function renderFields(a_model: IModel): void {
   fieldsHead.replaceChildren(...tableColumns().map((a_column) => {
     const cell = createElement("th", undefined, a_column.label === "DEC" ? "DEC ✎" : a_column.label);
@@ -877,7 +978,34 @@ function renderFields(a_model: IModel): void {
         : ".")
     + " Mask From / Mask To: the bits of the field in the value of its word, field = (word & mask) >> lowest bit of the mask.";
   fieldsBody.replaceChildren();
+  const counts = arrayCounts(a_model);
+  const isFieldSelected = fieldSelector(counts);
+  const columnCount = tableColumns().length;
+  let currentArray: string | undefined;
+  let currentElement: number | undefined;
   for (const [index, field] of a_model.decoded.entries()) {
+    // Arrays of structures: a foldable section, only the chosen elements
+    const member = arrayMemberOf(field.name);
+    if (member?.path !== currentArray) {
+      currentArray = member?.path;
+      currentElement = undefined;
+      if (member !== undefined) {
+        fieldsBody.append(arrayHeaderRow(member.path, counts.get(member.path) ?? 0, columnCount));
+      }
+    }
+    if (member !== undefined) {
+      if (!arrayView(member.path).open || !isFieldSelected(field)) {
+        continue;
+      }
+      if (member.index !== currentElement) {
+        currentElement = member.index;
+        const elementRow = createElement("tr", "array-element");
+        const elementCell = createElement("td", undefined, `${member.path}[${member.index}]`);
+        elementCell.colSpan = columnCount;
+        elementRow.append(elementCell);
+        fieldsBody.append(elementRow);
+      }
+    }
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
     if (field.raw === undefined) {
       row.classList.add("missing");

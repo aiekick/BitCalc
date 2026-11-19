@@ -190,3 +190,10 @@ details.fold > summary:hover { opacity: 1; }
 .column-toggles { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0; }
 .column-toggles .layout-label { margin-right: 4px; }
 .column-toggles button.pressed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.fields tr.array-header td { padding: 4px 2px; border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35)); }
+.fields tr.array-header td > * { margin-right: 10px; vertical-align: middle; }
+.array-toggle { padding: 0 6px; }
+.array-label { font-weight: bold; }
+.array-indices-input { width: 120px; }
+.array-shown { opacity: 0.7; }
+.fields tr.array-element td { font-size: 0.85em; opacity: 0.75; padding-top: 4px; font-style: italic; }

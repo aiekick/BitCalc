@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.4] - 2026-11-19
+
+### Changed
+
+- Struct Decoder: an array of structures is a foldable section of the field table, with only the chosen elements shown (element 0 by default): its header gives the number of elements and an **Indices** field taking an index (`0`), a range (`2-5`, `2..5`) or a list (`0,1,3,6`). Each shown element is introduced by its name (`items[3]`). Large arrays no longer fill the table with thousands of rows; the exports contain the chosen elements too.
+
 ## [0.0.3] - 2026-11-19
 
 ### Added
