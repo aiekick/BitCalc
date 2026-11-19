@@ -72,7 +72,7 @@ type BinView = "value" | "word" | "numbered";
 type GridOrder = "word" | "memory";
 /// Columns of the field table, each of which can be hidden
 type FixedColumn = "word" | "bitMin" | "bitMax" | "bits" | "field" | "type" | "dec";
-type OptionalColumn = FixedColumn | "hex" | "oct" | "maskFrom" | "maskTo" | "binFrom" | "binTo";
+type OptionalColumn = FixedColumn | "hex" | "oct" | "maskFrom" | "maskTo" | "wordFrom" | "wordTo" | "binFrom" | "binTo";
 /// The columns before the values, in table order
 const FIXED_KEYS: FixedColumn[] = ["word", "bitMin", "bitMax", "bits", "field", "type", "dec"];
 const OPTIONAL_COLUMNS: { key: OptionalColumn; label: string }[] = [
@@ -87,6 +87,8 @@ const OPTIONAL_COLUMNS: { key: OptionalColumn; label: string }[] = [
   { key: "oct", label: "OCT" },
   { key: "maskFrom", label: "Mask From" },
   { key: "maskTo", label: "Mask To" },
+  { key: "wordFrom", label: "Word From" },
+  { key: "wordTo", label: "Word To" },
   { key: "binFrom", label: "BIN From" },
   { key: "binTo", label: "BIN To" }
 ];
@@ -109,7 +111,7 @@ const state: IStructState = {
   folded: [],
   binView: "value",
   gridOrder: "word",
-  hiddenColumns: [],
+  hiddenColumns: ["wordFrom", "wordTo"],
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -537,7 +539,7 @@ interface IColumn {
 /// Keys of the optional columns in the order allColumns and allValueCells
 /// give them: the BIN view decides whether there is one BIN column or two.
 function optionalKeys(): OptionalColumn[] {
-  return ["hex", "oct", "maskFrom", "maskTo", "binFrom", ...(state.binView === "value" ? [] : ["binTo" as OptionalColumn])];
+  return ["hex", "oct", "maskFrom", "maskTo", "wordFrom", "wordTo", "binFrom", ...(state.binView === "value" ? [] : ["binTo" as OptionalColumn])];
 }
 
 function isShown(a_key: OptionalColumn): boolean {
@@ -573,7 +575,9 @@ function allColumns(): IColumn[] {
     { label: "HEX", title: "Value of the field in From", align: "right" },
     { label: "OCT", title: "Value of the field in From", align: "right" },
     { label: "Mask From", title: `Bits of the field in its word in From (${from}), as a mask on the word value: field = (word & mask) >> lowest bit of the mask`, align: "right" },
-    { label: "Mask To", title: `Bits of the field in its word in To (${to}), as a mask on the word value: field = (word & mask) >> lowest bit of the mask`, align: "right" }
+    { label: "Mask To", title: `Bits of the field in its word in To (${to}), as a mask on the word value: field = (word & mask) >> lowest bit of the mask`, align: "right" },
+    { label: "Word From", title: "Value of the whole word holding the field in From, as the buffer shows it in the words formats", align: "right" },
+    { label: "Word To", title: "Value of the whole word holding the field in To, as the buffer shows it in the words formats", align: "right" }
   );
   if (state.binView === "numbered") {
     columns.push(
@@ -614,6 +618,24 @@ function fieldMask(a_first: number, a_last: number, a_order: BitOrder): string {
   const low = a_order === "lsb0" ? a_first : width - 1 - a_last;
   const mask = ((1n << BigInt(a_last - a_first + 1)) - 1n) << BigInt(low);
   return `0x${mask.toString(16).toUpperCase().padStart(width / 4, "0")}`;
+}
+
+/// Values of the words holding a_field in a_bytes, read in a_endianness, in
+/// hex on the word size (several words for a field wider than a word).
+function wordValues(a_bytes: Uint8Array, a_field: IDecodedField, a_endianness: Endianness): string {
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  const first = a_field.byteOffset * 8 + (a_field.bitOffset ?? 0);
+  const firstWord = Math.floor(first / state.wordBits);
+  const lastWord = Math.floor((first + a_field.bitWidth - 1) / state.wordBits);
+  const values: string[] = [];
+  for (let word = firstWord; word <= lastWord; word++) {
+    const start = word * wordBytes;
+    if (start + wordBytes > a_bytes.length) {
+      return "—";
+    }
+    values.push(`0x${fromBytes(a_bytes.subarray(start, start + wordBytes), a_endianness).toString(16).toUpperCase().padStart(wordBytes * 2, "0")}`);
+  }
+  return values.join(" ");
 }
 
 /// BIN cell of the Word view: the word a_word of a_bytes read in a_layout,
@@ -666,7 +688,9 @@ function allValueCells(a_model: IModel, a_field: IDecodedField, a_to: IDecodedFi
     { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 16, true) },
     { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 8, false) },
     { text: spanning ? "—" : fieldMask(first, last, state.bitOrder) },
-    { text: spanning ? "—" : fieldMask(first, last, state.targetBitOrder) }
+    { text: spanning ? "—" : fieldMask(first, last, state.targetBitOrder) },
+    { text: wordValues(a_model.bytes, a_field, sourceLayout().endianness) },
+    { text: wordValues(a_model.converted, a_field, targetLayout().endianness) }
   );
   if (state.binView === "numbered") {
     cells.push(
