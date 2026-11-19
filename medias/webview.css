@@ -190,13 +190,10 @@ details.fold > summary:hover { opacity: 1; }
 .column-toggles { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0; }
 .column-toggles .layout-label { margin-right: 4px; }
 .column-toggles button.pressed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
-.fields tr.array-header td { padding: 4px 2px; border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35)); }
-.fields tr.array-header td > * { margin-right: 10px; vertical-align: middle; }
-.array-toggle { padding: 0 6px; }
-.array-label { font-weight: bold; }
-.array-indices { display: inline-flex; align-items: center; gap: 2px; }
-.array-indices-input { width: 70px; text-align: center; }
-.array-step { padding: 0 7px; }
-.fields tr.array-titles th { font-size: 0.85em; opacity: 0.7; font-weight: normal; text-align: left; padding-top: 2px; }
-.array-shown { opacity: 0.7; }
-.fields tr.array-element td { font-size: 0.85em; opacity: 0.75; padding-top: 4px; font-style: italic; }
+.tree-node { white-space: nowrap; }
+.tree-toggle { padding: 0 4px; margin-right: 4px; min-width: 18px; }
+.fields tr.tree-row td { font-weight: bold; }
+.fields tr.tree-row td.tree-node .tree-label { font-weight: bold; }
+.tree-range { display: inline-flex; align-items: center; gap: 3px; margin-left: 10px; font-weight: normal; }
+.tree-index { width: 52px; text-align: center; }
+.tree-count { opacity: 0.7; }

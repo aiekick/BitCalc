@@ -8,7 +8,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Changed
 
-- Struct Decoder: an array of structures is a foldable section of the field table showing one element at a time (element 0 by default): its header gives the name and the number of elements and an element selector with **−** / **+** buttons (or Up / Down in the field), followed by a row recalling the column titles. The selector also takes a range (`2-5`, `2..5`) or a list (`0,1,3,6`) to show several elements, each then introduced by its name. Large arrays no longer fill the table with thousands of rows; the exports contain the chosen elements too.
+- Struct Decoder: the field table is a tree. Nested structures and arrays (of structures or of scalars) are rows of their own, with their word, first and last bit, size in bits and type (`Header`, `Sensor[8]`), and fold to hide their content. An open array shows its elements from a first to a last index, two fields on its row (element 0 by default); each element of an array of structures is a foldable row too. The exports follow the tree: a folded structure is one row giving its place and size. Large arrays no longer fill the table with thousands of rows.
 - Templates: **Array of structures**, a report holding 8 sensor structures.
 
 ## [0.0.3] - 2026-11-19

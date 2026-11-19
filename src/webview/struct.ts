@@ -3,7 +3,7 @@ import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
 import { formatDeclarations } from "../utils/structFormat";
-import { arrayMemberOf, parseIndices } from "../utils/arrayView";
+import { IFieldNode, buildFieldTree } from "../utils/fieldTree";
 import { ColumnAlign, cppLineComment, csvTable, markdownTable, textTable } from "../utils/markdownTable";
 import {
   IDecodedField,
@@ -64,9 +64,10 @@ interface IStructState {
   gridOrder: GridOrder;
   /// optional columns of the field table the user hid
   hiddenColumns: OptionalColumn[];
-  /// arrays of structures in the field table, by path: the elements shown
-  /// ("0", "2-5", "0,1,3,6") and whether the section is open
-  arrayViews: Record<string, { indices: string; open: boolean }>;
+  /// tree of the field table, by node path: whether a structure or an array
+  /// is open (open by default), and the first and last elements shown of an
+  /// array (element 0 by default)
+  tree: Record<string, { open?: boolean; min?: number; max?: number }>;
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
 }
@@ -121,7 +122,7 @@ const state: IStructState = {
   binView: "value",
   gridOrder: "word",
   hiddenColumns: ["wordFrom", "wordTo"],
-  arrayViews: {},
+  tree: {},
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -138,7 +139,7 @@ state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 state.binView = oneOf(state.binView, ["value", "word", "numbered"], "value");
 state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
-state.arrayViews = typeof state.arrayViews === "object" && state.arrayViews !== null && !Array.isArray(state.arrayViews) ? state.arrayViews : {};
+state.tree = typeof state.tree === "object" && state.tree !== null && !Array.isArray(state.tree) ? state.tree : {};
 state.hiddenColumns = Array.isArray(state.hiddenColumns)
   ? state.hiddenColumns.filter((a_key) => OPTIONAL_COLUMNS.some((a_column) => a_column.key === a_key))
   : [];
@@ -300,6 +301,8 @@ interface IModel {
   readonly converted: Uint8Array;
   /// the fields read from the converted bytes in the To layout
   readonly decodedTo: IDecodedField[];
+  /// structures and arrays of the decoded structure, the fields as leaves
+  readonly tree: IFieldNode[];
   readonly alignment: IAlignment;
 }
 
@@ -339,6 +342,7 @@ function computeModel(): IModel {
     size: decoded.size,
     converted,
     decodedTo: decodeStruct(parsed.fields, converted, targetLayout(), alignment).fields,
+    tree: buildFieldTree(parsed.fields, decoded.fields.map((a_field) => a_field.name)),
     alignment
   };
 }
@@ -810,22 +814,32 @@ function wordSummaryRow(a_model: IModel, a_field: IDecodedField): string[] | und
 /// Rows of the field table as text, as copied by the export buttons.
 function tableRows(a_model: IModel): string[][] {
   const visible = [...FIXED_KEYS, ...optionalKeys()].filter(isShown);
-  const isFieldSelected = fieldSelector(arrayCounts(a_model));
-  return a_model.decoded.flatMap((a_field, a_index) => {
-    // Only the chosen elements of the arrays of structures
-    if (!isFieldSelected(a_field)) {
-      return [];
+  return treeRows(a_model.tree).flatMap(({ node, depth }) => {
+    const indent = "  ".repeat(depth);
+    if (node.slot === undefined) {
+      // A structure or an array, folded or not: its extent and its size
+      const range = node.kind === "array" && isOpen(node) ? ` [${arrayRange(node).join("..")}]` : "";
+      return [[
+        ...[
+          ...placementCells(nodeExtent(a_model, node)),
+          `${indent}${nodeLabel(node)}${range}`,
+          nodeType(node),
+          ""
+        ].filter((_, a_column) => isShown(FIXED_KEYS[a_column])),
+        ...nodeValueCells(a_model, node)
+      ]];
     }
+    const field = a_model.decoded[node.slot];
     const row = [
       ...[
-        ...placementCells(a_field),
-        fieldLabel(a_field),
-        a_field.typeName,
-        a_field.raw === undefined ? "—" : displayValue(a_field)
+        ...placementCells(field),
+        `${indent}${nodeLabel(node)}`,
+        field.typeName,
+        field.raw === undefined ? "—" : displayValue(field)
       ].filter((_, a_column) => isShown(FIXED_KEYS[a_column])),
-      ...valueCells(a_model, a_field, a_model.decodedTo[a_index]).map((a_cell) => a_cell.text)
+      ...valueCells(a_model, field, a_model.decodedTo[node.slot]).map((a_cell) => a_cell.text)
     ];
-    const summary = wordSummaryRow(a_model, a_field);
+    const summary = wordSummaryRow(a_model, field);
     if (summary === undefined) {
       return [row];
     }
@@ -860,15 +874,6 @@ function fieldsCppComment(a_model: IModel): string {
   return `${cppLineComment(`${exportTitle(a_model, false)}\n\n${textTable(exportColumns()[0], rows, exportColumns()[1])}`)}\n`;
 }
 
-/// Name of a field as shown in the table and the exports: its whole path
-/// (header.version), or with Names set to Name, only what follows the last
-/// dot (version).
-function fieldLabel(a_field: IDecodedField): string {
-  if (a_field.name === undefined) {
-    return "(padding)";
-  }
-  return state.nameMode === "name" ? a_field.name.slice(a_field.name.lastIndexOf(".") + 1) : a_field.name;
-}
 
 /// How a bit number reads in a bit numbering.
 function bitNumbering(a_order: BitOrder): string {
@@ -877,106 +882,133 @@ function bitNumbering(a_order: BitOrder): string {
 
 const fieldsHead = byId("fieldsHead");
 
-/// View of an array of structures: one element shown by default, open.
-function arrayView(a_path: string): { indices: string; open: boolean } {
-  const view = state.arrayViews[a_path];
-  return {
-    indices: typeof view?.indices === "string" ? view.indices : "0",
-    open: typeof view?.open === "boolean" ? view.open : true
-  };
+/// Whether a structure or an array is open (open by default).
+function isOpen(a_node: IFieldNode): boolean {
+  return state.tree[a_node.path]?.open ?? true;
 }
 
-/// Number of elements of each array of structures of the model.
-function arrayCounts(a_model: IModel): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const field of a_model.decoded) {
-    const member = arrayMemberOf(field.name);
-    if (member !== undefined) {
-      counts.set(member.path, Math.max(counts.get(member.path) ?? 0, member.index + 1));
+/// First and last elements shown of an array, element 0 by default.
+function arrayRange(a_node: IFieldNode): [number, number] {
+  const last = Math.max(0, (a_node.count ?? 1) - 1);
+  const view = state.tree[a_node.path];
+  const min = Math.min(Math.max(Math.trunc(view?.min ?? 0), 0), last);
+  const max = Math.min(Math.max(Math.trunc(view?.max ?? min), min), last);
+  return [min, max];
+}
+
+function setTree(a_node: IFieldNode, a_change: { open?: boolean; min?: number; max?: number }): void {
+  state.tree = { ...state.tree, [a_node.path]: { ...state.tree[a_node.path], ...a_change } };
+  update();
+}
+
+interface ITreeRow {
+  readonly node: IFieldNode;
+  readonly depth: number;
+}
+
+/// Rows of the field table: the nodes of the tree, the content of the open
+/// structures and arrays (of an array, the chosen elements only).
+function treeRows(a_nodes: readonly IFieldNode[], a_depth = 0, a_rows: ITreeRow[] = []): ITreeRow[] {
+  for (const node of a_nodes) {
+    a_rows.push({ node, depth: a_depth });
+    if (node.kind !== "leaf" && isOpen(node)) {
+      if (node.kind === "array") {
+        const [min, max] = arrayRange(node);
+        treeRows(node.children.slice(min, max + 1), a_depth + 1, a_rows);
+      } else {
+        treeRows(node.children, a_depth + 1, a_rows);
+      }
     }
   }
-  return counts;
+  return a_rows;
 }
 
-/// Test telling whether a field is shown: always, unless it is in an element
-/// of an array of structures that is not among the chosen indices. The
-/// indices of each array are read once.
-function fieldSelector(a_counts: Map<string, number>): (a_field: IDecodedField) => boolean {
-  const selections = new Map<string, ReadonlySet<number>>();
-  return (a_field) => {
-    const member = arrayMemberOf(a_field.name);
-    if (member === undefined) {
-      return true;
-    }
-    let indices = selections.get(member.path);
-    if (indices === undefined) {
-      indices = parseIndices(arrayView(member.path).indices, a_counts.get(member.path) ?? 0).indices;
-      selections.set(member.path, indices);
-    }
-    return indices.has(member.index);
-  };
-}
-
-/// Header row of the section of an array of structures: fold button, name,
-/// number of elements and the indices to show.
-function arrayHeaderRow(a_path: string, a_count: number, a_columns: number): HTMLTableRowElement {
-  const view = arrayView(a_path);
-  const selection = parseIndices(view.indices, a_count);
-  const row = createElement("tr", "array-header");
-  const cell = createElement("td");
-  cell.colSpan = a_columns;
-  const toggle = createElement("button", "array-toggle", view.open ? "▾" : "▸");
-  toggle.title = view.open ? "Fold the elements" : "Unfold the elements";
-  toggle.addEventListener("click", () => {
-    state.arrayViews = { ...state.arrayViews, [a_path]: { ...view, open: !view.open } };
-    update();
-  });
-  const label = createElement("span", "array-label", `${a_path}[${a_count}]`);
-  const indicesLabel = createElement("span", "array-indices");
-  const input = createElement("input", "array-indices-input");
-  input.value = view.indices;
-  input.spellcheck = false;
-  input.placeholder = "0";
-  input.title = "Element shown; also a range (2-5 or 2..5) or a list (0,1,3,6) to show several. Enter applies, Up / Down step";
-  if (selection.error !== undefined) {
-    input.classList.add("invalid");
-    input.title = selection.error;
+/// Extent of a node: from the first bit of its first field to the last bit
+/// of its last one, as a field for the placement cells.
+function nodeExtent(a_model: IModel, a_node: IFieldNode): IDecodedField {
+  let first = Number.MAX_SAFE_INTEGER;
+  let last = 0;
+  for (let index = a_node.firstSlot; index <= a_node.lastSlot; index++) {
+    const field = a_model.decoded[index];
+    const start = field.byteOffset * 8 + (field.bitOffset ?? 0);
+    first = Math.min(first, start);
+    last = Math.max(last, start + field.bitWidth - 1);
   }
-  const setIndices = (a_indices: string): void => {
-    if (a_indices !== view.indices) {
-      state.arrayViews = { ...state.arrayViews, [a_path]: { ...view, indices: a_indices } };
-      update();
-    }
+  // A structure starts a word and fills whole words (ICD layout), so does
+  // an array of structures; an array of scalars takes its exact bits
+  const holdsStructures = a_node.kind === "struct" || a_node.kind === "element" || a_node.children[0]?.kind === "element";
+  if (holdsStructures) {
+    last = Math.ceil((last + 1) / state.wordBits) * state.wordBits - 1;
+  }
+  return { ...a_model.decoded[a_node.firstSlot], byteOffset: Math.floor(first / 8), bitOffset: first % 8, bitWidth: last - first + 1 };
+}
+
+/// Name of a node as shown: its path, or with Names set to Name, its own
+/// name; padding bits are "(padding)".
+function nodeLabel(a_node: IFieldNode): string {
+  if (a_node.label === "") {
+    return "(padding)";
+  }
+  return state.nameMode === "name" ? a_node.label : a_node.path;
+}
+
+/// Type of a node: the structure, or the element type and count of an array.
+function nodeType(a_node: IFieldNode): string {
+  return a_node.kind === "array" ? `${a_node.typeName}[${a_node.count ?? 0}]` : a_node.typeName;
+}
+
+/// Cells of a structure or array row after DEC: its masks when it lies in
+/// one word, nothing for the values.
+function nodeValueCells(a_model: IModel, a_node: IFieldNode): string[] {
+  const placement = placementCells(nodeExtent(a_model, a_node));
+  const inWord = !placement[0].includes("–");
+  const first = Number(placement[1]);
+  const last = Number(placement[2]);
+  const texts: Partial<Record<OptionalColumn, string>> = {
+    maskFrom: inWord ? fieldMask(first, last, state.bitOrder) : "",
+    maskTo: inWord ? fieldMask(first, last, state.targetBitOrder) : ""
   };
-  const apply = (): void => setIndices(input.value);
-  // - / +: the previous / next element, from the first one shown
-  const step = (a_delta: number): void => {
-    const current = selection.indices.size > 0 ? Math.min(...selection.indices) : 0;
-    setIndices(String(Math.min(Math.max(current + a_delta, 0), Math.max(a_count - 1, 0))));
-  };
-  const minus = createElement("button", "array-step", "−");
-  minus.title = "Previous element";
-  minus.addEventListener("click", () => step(-1));
-  const plus = createElement("button", "array-step", "+");
-  plus.title = "Next element";
-  plus.addEventListener("click", () => step(1));
-  input.addEventListener("keydown", (a_event) => {
-    if (a_event.key === "ArrowUp" || a_event.key === "ArrowDown") {
-      a_event.preventDefault();
-      step(a_event.key === "ArrowUp" ? 1 : -1);
-    }
-  });
-  input.addEventListener("keydown", (a_event) => {
-    if (a_event.key === "Enter") {
-      apply();
-    }
-  });
-  input.addEventListener("blur", apply);
-  indicesLabel.append(minus, input, plus);
-  const shown = createElement("span", "array-shown", selection.indices.size === 1 ? `/ ${a_count}` : `${selection.indices.size} of ${a_count} shown`);
-  cell.append(toggle, label, indicesLabel, shown);
-  row.append(cell);
-  return row;
+  return optionalKeys().filter(isShown).map((a_key) => texts[a_key] ?? "");
+}
+
+/// Field cell of a structure or array row: fold button, name and, for an
+/// array, the first and last elements shown.
+function nodeFieldCell(a_node: IFieldNode, a_depth: number): HTMLTableCellElement {
+  const cell = createElement("td", "tree-node");
+  cell.style.paddingLeft = `${4 + a_depth * 16}px`;
+  const open = isOpen(a_node);
+  const toggle = createElement("button", "tree-toggle", open ? "▾" : "▸");
+  toggle.title = open ? "Fold" : "Unfold";
+  toggle.addEventListener("click", () => setTree(a_node, { open: !open }));
+  cell.append(toggle, createElement("span", "tree-label", nodeLabel(a_node)));
+  if (a_node.kind === "array" && open) {
+    const [min, max] = arrayRange(a_node);
+    const last = Math.max(0, (a_node.count ?? 1) - 1);
+    const bound = (a_value: number, a_title: string, a_apply: (a_index: number) => void): HTMLInputElement => {
+      const input = createElement("input", "tree-index");
+      input.type = "number";
+      input.min = "0";
+      input.max = String(last);
+      input.value = String(a_value);
+      input.title = a_title;
+      input.addEventListener("change", () => {
+        const index = Number(input.value);
+        if (Number.isInteger(index)) {
+          a_apply(Math.min(Math.max(index, 0), last));
+        }
+      });
+      return input;
+    };
+    const range = createElement("span", "tree-range");
+    range.append(
+      bound(min, "First element shown", (a_index) => setTree(a_node, { min: a_index, max: Math.max(a_index, max) })),
+      createElement("span", undefined, ".."),
+      bound(max, "Last element shown", (a_index) => setTree(a_node, { min: Math.min(min, a_index), max: a_index })),
+      createElement("span", "tree-count", `/ ${a_node.count ?? 0}`)
+    );
+    cell.append(range);
+  }
+  return cell;
 }
 
 function renderFields(a_model: IModel): void {
@@ -996,52 +1028,30 @@ function renderFields(a_model: IModel): void {
         : ".")
     + " Mask From / Mask To: the bits of the field in the value of its word, field = (word & mask) >> lowest bit of the mask.";
   fieldsBody.replaceChildren();
-  const counts = arrayCounts(a_model);
-  const isFieldSelected = fieldSelector(counts);
-  const columnCount = tableColumns().length;
-  let currentArray: string | undefined;
-  let currentElement: number | undefined;
-  for (const [index, field] of a_model.decoded.entries()) {
-    // Arrays of structures: a foldable section, only the chosen elements
-    const member = arrayMemberOf(field.name);
-    if (member?.path !== currentArray) {
-      currentArray = member?.path;
-      currentElement = undefined;
-      if (member !== undefined) {
-        fieldsBody.append(arrayHeaderRow(member.path, counts.get(member.path) ?? 0, columnCount));
-        if (arrayView(member.path).open) {
-          // The column titles again, the section may be far from the top
-          const titles = createElement("tr", "array-titles");
-          titles.append(...tableColumns().map((a_column) => createElement("th", undefined, a_column.label)));
-          fieldsBody.append(titles);
-        }
+  for (const { node, depth } of treeRows(a_model.tree)) {
+    if (node.slot === undefined) {
+      // A structure or an array: its extent, its name with the fold button
+      const row = createElement("tr", `tree-row tree-${node.kind}`);
+      const fixed: HTMLTableCellElement[] = placementCells(nodeExtent(a_model, node)).map((a_text) => createElement("td", "number", a_text));
+      fixed.push(nodeFieldCell(node, depth), createElement("td", undefined, nodeType(node)), createElement("td"));
+      row.append(...fixed.filter((_, a_column) => isShown(FIXED_KEYS[a_column])));
+      for (const text of nodeValueCells(a_model, node)) {
+        row.append(createElement("td", "value", text));
       }
+      fieldsBody.append(row);
+      continue;
     }
-    if (member !== undefined) {
-      if (!arrayView(member.path).open || !isFieldSelected(field)) {
-        continue;
-      }
-      // A line naming each element, when several are shown (with one, the
-      // header already names it)
-      if (member.index !== currentElement) {
-        currentElement = member.index;
-        if (parseIndices(arrayView(member.path).indices, counts.get(member.path) ?? 0).indices.size > 1) {
-          const elementRow = createElement("tr", "array-element");
-          const elementCell = createElement("td", undefined, `${member.path}[${member.index}]`);
-          elementCell.colSpan = columnCount;
-          elementRow.append(elementCell);
-          fieldsBody.append(elementRow);
-        }
-      }
-    }
+    const index = node.slot;
+    const field = a_model.decoded[index];
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
     if (field.raw === undefined) {
       row.classList.add("missing");
       row.title = "The buffer is too short for this field";
     }
     const fixed: HTMLTableCellElement[] = placementCells(field).map((a_text) => createElement("td", "number", a_text));
-    const nameCell = createElement("td", undefined, fieldLabel(field));
-    if (field.name !== undefined && state.nameMode === "name" && field.name.includes(".")) {
+    const nameCell = createElement("td", undefined, nodeLabel(node));
+    nameCell.style.paddingLeft = `${4 + depth * 16 + (depth > 0 ? 22 : 0)}px`;
+    if (field.name !== undefined && state.nameMode === "name") {
       nameCell.title = field.name;
     }
     const valueCell = createElement("td", "value");

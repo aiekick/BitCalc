@@ -54,8 +54,8 @@ struct Message {
   },
   {
     label: "Array of structures",
-    definition: `// An array of structures is a foldable section of the field table:
-// - / + choose the element shown (a range 2-5 or a list 0,1,3,6 also work).
+    definition: `// In the field table, structures and arrays are foldable rows; an array
+// shows its elements from a first to a last index (element 0 by default).
 enum SensorState : uint8 {
     SENSOR_OFF,
     SENSOR_ON,
