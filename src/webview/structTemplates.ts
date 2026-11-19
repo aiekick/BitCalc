@@ -53,6 +53,29 @@ struct Message {
 }`
   },
   {
+    label: "Array of structures",
+    definition: `// An array of structures is a foldable section of the field table:
+// its Indices field chooses the elements shown (0, 2-5, 0,1,3,6).
+enum SensorState : uint8 {
+    SENSOR_OFF,
+    SENSOR_ON,
+    SENSOR_FAULT
+}
+
+struct Sensor {
+    uint16      id;
+    SensorState state : 2;
+    uint8       gain  : 6;
+    int16       value;
+}
+
+struct SensorReport {
+    uint32 timestamp;
+    uint8  count;
+    Sensor sensors[8];
+}`
+  },
+  {
     label: "IPv4 header (BE, MSB0)",
     endianness: "big",
     bitOrder: "msb0",
