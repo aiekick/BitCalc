@@ -61,6 +61,8 @@ interface IStructState {
   /// byte grid: each word most significant byte first ("word") or the bytes
   /// in memory order ("memory")
   gridOrder: GridOrder;
+  /// optional columns of the field table the user hid
+  hiddenColumns: OptionalColumn[];
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
 }
@@ -68,6 +70,26 @@ interface IStructState {
 type NameMode = "path" | "name";
 type BinView = "value" | "word" | "numbered";
 type GridOrder = "word" | "memory";
+/// Columns of the field table, each of which can be hidden
+type FixedColumn = "word" | "bitMin" | "bitMax" | "bits" | "field" | "type" | "dec";
+type OptionalColumn = FixedColumn | "hex" | "oct" | "maskFrom" | "maskTo" | "binFrom" | "binTo";
+/// The columns before the values, in table order
+const FIXED_KEYS: FixedColumn[] = ["word", "bitMin", "bitMax", "bits", "field", "type", "dec"];
+const OPTIONAL_COLUMNS: { key: OptionalColumn; label: string }[] = [
+  { key: "word", label: "Word" },
+  { key: "bitMin", label: "Bit min" },
+  { key: "bitMax", label: "Bit max" },
+  { key: "bits", label: "Bits" },
+  { key: "field", label: "Field" },
+  { key: "type", label: "Type" },
+  { key: "dec", label: "DEC" },
+  { key: "hex", label: "HEX" },
+  { key: "oct", label: "OCT" },
+  { key: "maskFrom", label: "Mask From" },
+  { key: "maskTo", label: "Mask To" },
+  { key: "binFrom", label: "BIN From" },
+  { key: "binTo", label: "BIN To" }
+];
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
 
@@ -87,6 +109,7 @@ const state: IStructState = {
   folded: [],
   binView: "value",
   gridOrder: "word",
+  hiddenColumns: [],
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -103,6 +126,9 @@ state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 state.binView = oneOf(state.binView, ["value", "word", "numbered"], "value");
 state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
+state.hiddenColumns = Array.isArray(state.hiddenColumns)
+  ? state.hiddenColumns.filter((a_key) => OPTIONAL_COLUMNS.some((a_column) => a_column.key === a_key))
+  : [];
 state.folded = Array.isArray(state.folded) ? state.folded.filter((a_name) => typeof a_name === "string") : [];
 const saveState = createStateSaver(api);
 
@@ -154,6 +180,10 @@ byId("app").innerHTML = `
   </div>
   <details class="fold" data-fold="table" open>
     <summary class="section-title">Fields</summary>
+    <div class="column-toggles">
+      <span class="layout-label" title="Columns shown in the field table and its exports">Columns</span>
+      ${OPTIONAL_COLUMNS.map((a_column) => `<button data-column="${a_column.key}" title="Show or hide ${a_column.label}${a_column.key === "binFrom" ? " (the BIN column in the Value view)" : ""}">${a_column.label}</button>`).join("")}
+    </div>
     <div class="table-note" id="tableNote"></div>
     <div class="table-wrap">
       <table class="fields">
@@ -504,8 +534,30 @@ interface IColumn {
   readonly align: ColumnAlign;
 }
 
-/// Columns of the field table.
+/// Keys of the optional columns in the order allColumns and allValueCells
+/// give them: the BIN view decides whether there is one BIN column or two.
+function optionalKeys(): OptionalColumn[] {
+  return ["hex", "oct", "maskFrom", "maskTo", "binFrom", ...(state.binView === "value" ? [] : ["binTo" as OptionalColumn])];
+}
+
+function isShown(a_key: OptionalColumn): boolean {
+  return !state.hiddenColumns.includes(a_key);
+}
+
+/// Columns of the field table, without the hidden ones.
 function tableColumns(): IColumn[] {
+  const keys: OptionalColumn[] = [...FIXED_KEYS, ...optionalKeys()];
+  return allColumns().filter((_, a_index) => isShown(keys[a_index]));
+}
+
+/// Cells of a_field after DEC, without the hidden columns.
+function valueCells(a_model: IModel, a_field: IDecodedField, a_to: IDecodedField | undefined): IValueCell[] {
+  const keys = optionalKeys();
+  return allValueCells(a_model, a_field, a_to).filter((_, a_index) => isShown(keys[a_index]));
+}
+
+/// Every column of the field table.
+function allColumns(): IColumn[] {
   const from = state.bitOrder.toUpperCase();
   const to = state.targetBitOrder.toUpperCase();
   const columns: IColumn[] = [
@@ -601,7 +653,7 @@ function binCell(a_raw: bigint | undefined, a_width: number, a_first: number, a_
 
 /// Cells of a_field after DEC: HEX, OCT, then the BIN column(s) of the
 /// chosen view.
-function valueCells(a_model: IModel, a_field: IDecodedField, a_to: IDecodedField | undefined): IValueCell[] {
+function allValueCells(a_model: IModel, a_field: IDecodedField, a_to: IDecodedField | undefined): IValueCell[] {
   const raw = a_field.raw;
   const toRaw = a_to?.raw;
   const cells: IValueCell[] = [];
@@ -677,10 +729,12 @@ function valueElement(a_cell: IValueCell): HTMLTableCellElement {
 /// Rows of the field table as text, as copied by the export buttons.
 function tableRows(a_model: IModel): string[][] {
   return a_model.decoded.map((a_field, a_index) => [
-    ...placementCells(a_field),
-    fieldLabel(a_field),
-    a_field.typeName,
-    a_field.raw === undefined ? "—" : displayValue(a_field),
+    ...[
+      ...placementCells(a_field),
+      fieldLabel(a_field),
+      a_field.typeName,
+      a_field.raw === undefined ? "—" : displayValue(a_field)
+    ].filter((_, a_column) => isShown(FIXED_KEYS[a_column])),
     ...valueCells(a_model, a_field, a_model.decodedTo[a_index]).map((a_cell) => a_cell.text)
   ]);
 }
@@ -750,17 +804,15 @@ function renderFields(a_model: IModel): void {
       row.classList.add("missing");
       row.title = "The buffer is too short for this field";
     }
-    for (const text of placementCells(field)) {
-      row.append(createElement("td", "number", text));
-    }
+    const fixed: HTMLTableCellElement[] = placementCells(field).map((a_text) => createElement("td", "number", a_text));
     const nameCell = createElement("td", undefined, fieldLabel(field));
     if (field.name !== undefined && state.nameMode === "name" && field.name.includes(".")) {
       nameCell.title = field.name;
     }
-    row.append(nameCell, createElement("td", undefined, field.typeName));
     const valueCell = createElement("td", "value");
     valueCell.append(field.enumDef !== undefined ? enumSelect(field, index) : valueInput(field, index));
-    row.append(valueCell);
+    fixed.push(nameCell, createElement("td", undefined, field.typeName), valueCell);
+    row.append(...fixed.filter((_, a_column) => isShown(FIXED_KEYS[a_column])));
     for (const cell of valueCells(a_model, field, a_model.decodedTo[index])) {
       row.append(valueElement(cell));
     }
@@ -1120,6 +1172,25 @@ const showBinView = bindSegmented<BinView>(byId("binView"), (a_view) => {
   update();
 });
 showBinView(state.binView);
+
+// Show / hide the optional columns of the field table
+const columnButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-column]"));
+function showColumnButtons(): void {
+  for (const button of columnButtons) {
+    const shown = isShown(button.dataset.column as OptionalColumn);
+    button.classList.toggle("pressed", shown);
+    button.setAttribute("aria-pressed", String(shown));
+  }
+}
+for (const button of columnButtons) {
+  button.addEventListener("click", () => {
+    const key = button.dataset.column as OptionalColumn;
+    state.hiddenColumns = isShown(key) ? [...state.hiddenColumns, key] : state.hiddenColumns.filter((a_key) => a_key !== key);
+    showColumnButtons();
+    update();
+  });
+}
+showColumnButtons();
 
 const showGridOrder = bindSegmented<GridOrder>(byId("gridOrder"), (a_order) => {
   state.gridOrder = a_order;

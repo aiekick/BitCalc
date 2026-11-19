@@ -8,6 +8,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 
+- Struct Decoder: **Columns** buttons above the field table show or hide each column (Word, Bit min, Bit max, Bits, Field, Type, DEC, HEX, OCT, Mask From, Mask To, BIN From, BIN To); the exports follow the shown columns, and the choice is kept.
 - Struct Decoder: **Mask From** and **Mask To** columns, the bits of each field in the value of its word in each layout (field = (word & mask) >> lowest bit of the mask).
 - Struct Decoder: **BIN Word** view: BIN From and BIN To show the whole word holding the field, the bits of the field highlighted (in the exports, the other bits are dots).
 - Struct Decoder: **Order** choice for the Byte by byte grid and its exports: **Word** (default), each word most significant byte first so that it reads as its value, or **Memory**, the bytes in memory order (`+0 +1 +2 +3`) as the buffer in bytes.

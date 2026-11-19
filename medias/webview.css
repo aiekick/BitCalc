@@ -187,3 +187,6 @@ details.fold > summary:hover { opacity: 1; }
 .bin-word { white-space: nowrap; }
 .bin-word .bin-field { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .bin-word .bin-other { opacity: 0.4; }
+.column-toggles { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 4px 0; }
+.column-toggles .layout-label { margin-right: 4px; }
+.column-toggles button.pressed { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
