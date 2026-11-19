@@ -1,4 +1,4 @@
-import { BitOrder, Endianness, formatBits, fromBytes } from "../utils/bits";
+import { BitOrder, Endianness, formatBits, fromBytes, groupDigits } from "../utils/bits";
 import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
@@ -591,8 +591,8 @@ function allColumns(): IColumn[] {
     );
   } else if (state.binView === "word") {
     columns.push(
-      { label: `BIN From word ${from}`, title: `The word of the field in From, most significant bit on the left, the bits of the field highlighted (in the exports, the bits of the field between [ ])`, align: "right" },
-      { label: `BIN To word ${to}`, title: `The word of the field in To, most significant bit on the left, the bits of the field highlighted (in the exports, the bits of the field between [ ])`, align: "right" }
+      { label: `BIN From word ${from}`, title: `The word of the field in From, most significant bit on the left, the bits of the field highlighted (in the exports, dots for the other bits and a row with the whole word after its last field)`, align: "right" },
+      { label: `BIN To word ${to}`, title: `The word of the field in To, most significant bit on the left, the bits of the field highlighted (in the exports, dots for the other bits and a row with the whole word after its last field)`, align: "right" }
     );
   } else {
     columns.push({ label: "BIN", title: "Bits of the value, most significant bit on the left, the same in From and To", align: "right" });
@@ -670,21 +670,10 @@ function wordCell(a_bytes: Uint8Array, a_word: number, a_first: number, a_last: 
     const number = a_layout.bitOrder === "lsb0" ? width - 1 - a_index : a_index;
     return number >= a_first && number <= a_last;
   });
-  // The exports show the whole word, the bits of the field between [ ]
-  let text = "";
-  for (let index = 0; index < bits.length; index++) {
-    if (index > 0 && (bits.length - index) % 4 === 0) {
-      text += " ";
-    }
-    if (inField[index] && (index === 0 || !inField[index - 1])) {
-      text += "[";
-    }
-    text += bits[index];
-    if (inField[index] && (index === bits.length - 1 || !inField[index + 1])) {
-      text += "]";
-    }
-  }
-  return { text, word: { bits, inField } };
+  // The exports show the bits of the field, dots for the others; a row
+  // after the word gives the whole word (see tableRows)
+  const masked = Array.from(bits, (a_bit, a_index) => (inField[a_index] ? a_bit : ".")).join("");
+  return { text: groupDigits(masked, 4), word: { bits, inField } };
 }
 
 /// BIN cell of a value whose field lies on bits a_first..a_last of its word.
@@ -779,9 +768,36 @@ function valueElement(a_cell: IValueCell): HTMLTableCellElement {
   return cell;
 }
 
+/// Row of the exports after the last field of a word holding several fields
+/// in the BIN Word view: the word number, its values and its whole binary
+/// form, the other cells empty.
+function wordSummaryRow(a_model: IModel, a_field: IDecodedField): string[] | undefined {
+  const [firstWord, lastWord] = fieldWords(a_field);
+  if (state.binView !== "word" || firstWord !== lastWord || !closesWord(a_model, a_field)) {
+    return undefined;
+  }
+  const inWord = a_model.decoded.filter((a_other) => fieldWords(a_other)[0] === firstWord);
+  if (inWord.length < 2) {
+    return undefined;
+  }
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  const start = firstWord * wordBytes;
+  const binary = (a_bytes: Uint8Array, a_endianness: Endianness): string => (start + wordBytes > a_bytes.length
+    ? "—"
+    : groupDigits(fromBytes(a_bytes.subarray(start, start + wordBytes), a_endianness).toString(2).padStart(wordBytes * 8, "0"), 4));
+  const cellOf: Partial<Record<OptionalColumn, string>> = {
+    word: String(firstWord),
+    wordFrom: wordValues(a_model.bytes, a_field, state.endianness),
+    wordTo: wordValues(a_model.converted, a_field, state.targetEndianness),
+    binFrom: binary(a_model.bytes, state.endianness),
+    binTo: binary(a_model.converted, state.targetEndianness)
+  };
+  return [...FIXED_KEYS, ...optionalKeys()].filter(isShown).map((a_key) => cellOf[a_key] ?? "");
+}
+
 /// Rows of the field table as text, as copied by the export buttons.
 function tableRows(a_model: IModel): string[][] {
-  return a_model.decoded.map((a_field, a_index) => [
+  return a_model.decoded.flatMap((a_field, a_index) => [[
     ...[
       ...placementCells(a_field),
       fieldLabel(a_field),
@@ -789,7 +805,7 @@ function tableRows(a_model: IModel): string[][] {
       a_field.raw === undefined ? "—" : displayValue(a_field)
     ].filter((_, a_column) => isShown(FIXED_KEYS[a_column])),
     ...valueCells(a_model, a_field, a_model.decodedTo[a_index]).map((a_cell) => a_cell.text)
-  ]);
+  ], ...[wordSummaryRow(a_model, a_field)].filter((a_row): a_row is string[] => a_row !== undefined)]);
 }
 
 /// Headers and alignments of the exported table.
