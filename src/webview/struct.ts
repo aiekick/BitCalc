@@ -3,7 +3,7 @@ import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
 import { formatDeclarations } from "../utils/structFormat";
-import { ColumnAlign, cppLineComment, markdownTable, textTable } from "../utils/markdownTable";
+import { ColumnAlign, cppLineComment, csvTable, markdownTable, textTable } from "../utils/markdownTable";
 import {
   IDecodedField,
   ILayoutOptions,
@@ -182,7 +182,7 @@ byId("app").innerHTML = `
       <div class="segmented" id="binView" title="Value: the bits of the value, most significant bit on the left, the same in From and To. Word: BIN From and BIN To show the whole word holding the field, the bits of the field highlighted. Numbered: BIN From and BIN To, each bit numbered in its convention (hover a bit), to see the same value labelled differently">
         <button data-value="value">Value</button><button data-value="word">Word</button><button data-value="numbered">Numbered</button>
       </div>
-      <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button><button id="copyCppComment" title="Copy the field table as a C++ comment (// lines), to paste above the structure in the code">C++ comment</button>
+      <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button><button id="copyCppComment" title="Copy the field table as a C++ comment (// lines), to paste above the structure in the code">C++ comment</button><button id="copyCsv" title="Copy the field table as CSV, cells separated by ; (the shown columns)">CSV</button>
     </span>
   </div>
   <details class="fold" data-fold="table" open>
@@ -1273,6 +1273,11 @@ const showNameMode = bindSegmented<NameMode>(byId("nameMode"), (a_mode) => {
 });
 showNameMode(state.nameMode);
 
+byId("copyCsv").addEventListener("click", () => {
+  if (model !== undefined) {
+    api.postMessage({ type: "copy", text: csvTable(exportColumns()[0], tableRows(model)) });
+  }
+});
 byId("copyGridMarkdown").addEventListener("click", () => {
   if (model !== undefined) {
     api.postMessage({ type: "copy", text: gridMarkdown(model) });

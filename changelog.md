@@ -6,6 +6,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [0.0.3] - 2026-11-19
 
+### Added
+
+- Struct Decoder: **CSV** export of the field table, cells separated by `;` (the shown columns, with the word rows of the BIN Word view).
+
 ### Changed
 
 - Readme and help: the array syntax and the forms not supported yet (array size given by a constant or an expression, several dimensions, structure defined in a field declaration, typedefs of arrays) are documented.

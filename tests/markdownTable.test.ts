@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { cppLineComment, markdownTable, textTable } from "../src/utils/markdownTable";
+import { cppLineComment, csvTable, markdownTable, textTable } from "../src/utils/markdownTable";
 
 describe("markdownTable", () => {
   test("pads the columns and aligns numbers on the right", () => {
@@ -34,5 +34,16 @@ describe("textTable / cppLineComment", () => {
       "//    0  type",
       "//   12  a"
     ].join("\n"));
+  });
+});
+
+describe("csvTable", () => {
+  test("separates with ; and quotes the cells that need it", () => {
+    assert.equal(csvTable(["Field", "DEC"], [["a", "1"], ["b;c", 'say "hi"'], ["short"]]), [
+      "Field;DEC",
+      "a;1",
+      '"b;c";"say ""hi"""',
+      "short;"
+    ].join("\n") + "\n");
   });
 });

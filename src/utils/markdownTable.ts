@@ -36,3 +36,14 @@ export function textTable(a_headers: readonly string[], a_rows: readonly (readon
 export function cppLineComment(a_text: string): string {
   return a_text.split("\n").map((a_line) => (a_line === "" ? "//" : `// ${a_line}`)).join("\n");
 }
+
+/// CSV table, a_delimiter between the cells (";" by default, as spreadsheets
+/// in many locales expect). A cell holding the delimiter, a quote or a line
+/// break is quoted, its quotes doubled.
+export function csvTable(a_headers: readonly string[], a_rows: readonly (readonly string[])[], a_delimiter = ";"): string {
+  const cell = (a_text: string): string =>
+    (a_text.includes(a_delimiter) || /["\r\n]/.test(a_text) ? `"${a_text.replace(/"/g, '""')}"` : a_text);
+  const line = (a_cells: readonly string[]): string =>
+    Array.from({ length: a_headers.length }, (_, a_index) => cell(a_cells[a_index] ?? "")).join(a_delimiter);
+  return [line(a_headers), ...a_rows.map(line)].join("\n") + "\n";
+}
