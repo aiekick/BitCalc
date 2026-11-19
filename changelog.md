@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.2] - 2026-11-19
+
+### Added
+
+- Struct Decoder: **Markdown** and **C++ comment** exports of the Byte by byte comparison: one line per word with the From and To bytes, most significant byte first, and their offsets; the bytes that differ between From and To are in bold (Markdown) or marked with `*` (C++).
+
 ## [0.0.1] - 2026-11-18
 
 First release.
