@@ -194,6 +194,9 @@ details.fold > summary:hover { opacity: 1; }
 .fields tr.array-header td > * { margin-right: 10px; vertical-align: middle; }
 .array-toggle { padding: 0 6px; }
 .array-label { font-weight: bold; }
-.array-indices-input { width: 120px; }
+.array-indices { display: inline-flex; align-items: center; gap: 2px; }
+.array-indices-input { width: 70px; text-align: center; }
+.array-step { padding: 0 7px; }
+.fields tr.array-titles th { font-size: 0.85em; opacity: 0.7; font-weight: normal; text-align: left; padding-top: 2px; }
 .array-shown { opacity: 0.7; }
 .fields tr.array-element td { font-size: 0.85em; opacity: 0.75; padding-top: 4px; font-style: italic; }

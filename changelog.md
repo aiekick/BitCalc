@@ -8,7 +8,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Changed
 
-- Struct Decoder: an array of structures is a foldable section of the field table, with only the chosen elements shown (element 0 by default): its header gives the number of elements and an **Indices** field taking an index (`0`), a range (`2-5`, `2..5`) or a list (`0,1,3,6`). Each shown element is introduced by its name (`items[3]`). Large arrays no longer fill the table with thousands of rows; the exports contain the chosen elements too.
+- Struct Decoder: an array of structures is a foldable section of the field table showing one element at a time (element 0 by default): its header gives the name and the number of elements and an element selector with **−** / **+** buttons (or Up / Down in the field), followed by a row recalling the column titles. The selector also takes a range (`2-5`, `2..5`) or a list (`0,1,3,6`) to show several elements, each then introduced by its name. Large arrays no longer fill the table with thousands of rows; the exports contain the chosen elements too.
 - Templates: **Array of structures**, a report holding 8 sensor structures.
 
 ## [0.0.3] - 2026-11-19

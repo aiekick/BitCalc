@@ -932,30 +932,48 @@ function arrayHeaderRow(a_path: string, a_count: number, a_columns: number): HTM
     update();
   });
   const label = createElement("span", "array-label", `${a_path}[${a_count}]`);
-  const indicesLabel = createElement("label", "array-indices", "Indices ");
+  const indicesLabel = createElement("span", "array-indices");
   const input = createElement("input", "array-indices-input");
   input.value = view.indices;
   input.spellcheck = false;
-  input.placeholder = "0, 2-5, 0,1,3,6";
-  input.title = "Elements to show: an index (0), a range (2-5 or 2..5) or a list (0,1,3,6); Enter applies";
+  input.placeholder = "0";
+  input.title = "Element shown; also a range (2-5 or 2..5) or a list (0,1,3,6) to show several. Enter applies, Up / Down step";
   if (selection.error !== undefined) {
     input.classList.add("invalid");
     input.title = selection.error;
   }
-  const apply = (): void => {
-    if (input.value !== view.indices) {
-      state.arrayViews = { ...state.arrayViews, [a_path]: { ...view, indices: input.value } };
+  const setIndices = (a_indices: string): void => {
+    if (a_indices !== view.indices) {
+      state.arrayViews = { ...state.arrayViews, [a_path]: { ...view, indices: a_indices } };
       update();
     }
   };
+  const apply = (): void => setIndices(input.value);
+  // - / +: the previous / next element, from the first one shown
+  const step = (a_delta: number): void => {
+    const current = selection.indices.size > 0 ? Math.min(...selection.indices) : 0;
+    setIndices(String(Math.min(Math.max(current + a_delta, 0), Math.max(a_count - 1, 0))));
+  };
+  const minus = createElement("button", "array-step", "−");
+  minus.title = "Previous element";
+  minus.addEventListener("click", () => step(-1));
+  const plus = createElement("button", "array-step", "+");
+  plus.title = "Next element";
+  plus.addEventListener("click", () => step(1));
+  input.addEventListener("keydown", (a_event) => {
+    if (a_event.key === "ArrowUp" || a_event.key === "ArrowDown") {
+      a_event.preventDefault();
+      step(a_event.key === "ArrowUp" ? 1 : -1);
+    }
+  });
   input.addEventListener("keydown", (a_event) => {
     if (a_event.key === "Enter") {
       apply();
     }
   });
   input.addEventListener("blur", apply);
-  indicesLabel.append(input);
-  const shown = createElement("span", "array-shown", `${selection.indices.size} of ${a_count} shown`);
+  indicesLabel.append(minus, input, plus);
+  const shown = createElement("span", "array-shown", selection.indices.size === 1 ? `/ ${a_count}` : `${selection.indices.size} of ${a_count} shown`);
   cell.append(toggle, label, indicesLabel, shown);
   row.append(cell);
   return row;
@@ -991,19 +1009,29 @@ function renderFields(a_model: IModel): void {
       currentElement = undefined;
       if (member !== undefined) {
         fieldsBody.append(arrayHeaderRow(member.path, counts.get(member.path) ?? 0, columnCount));
+        if (arrayView(member.path).open) {
+          // The column titles again, the section may be far from the top
+          const titles = createElement("tr", "array-titles");
+          titles.append(...tableColumns().map((a_column) => createElement("th", undefined, a_column.label)));
+          fieldsBody.append(titles);
+        }
       }
     }
     if (member !== undefined) {
       if (!arrayView(member.path).open || !isFieldSelected(field)) {
         continue;
       }
+      // A line naming each element, when several are shown (with one, the
+      // header already names it)
       if (member.index !== currentElement) {
         currentElement = member.index;
-        const elementRow = createElement("tr", "array-element");
-        const elementCell = createElement("td", undefined, `${member.path}[${member.index}]`);
-        elementCell.colSpan = columnCount;
-        elementRow.append(elementCell);
-        fieldsBody.append(elementRow);
+        if (parseIndices(arrayView(member.path).indices, counts.get(member.path) ?? 0).indices.size > 1) {
+          const elementRow = createElement("tr", "array-element");
+          const elementCell = createElement("td", undefined, `${member.path}[${member.index}]`);
+          elementCell.colSpan = columnCount;
+          elementRow.append(elementCell);
+          fieldsBody.append(elementRow);
+        }
       }
     }
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
