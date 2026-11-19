@@ -1,4 +1,4 @@
-import { BitOrder, Endianness, formatBits } from "../utils/bits";
+import { BitOrder, Endianness, formatBits, fromBytes, groupDigits } from "../utils/bits";
 import { parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
@@ -66,7 +66,7 @@ interface IStructState {
 }
 
 type NameMode = "path" | "name";
-type BinView = "value" | "numbered";
+type BinView = "value" | "word" | "numbered";
 type GridOrder = "word" | "memory";
 
 const SAMPLE_BUFFER = "45 A7 12 34 00 00 C0 3F";
@@ -101,7 +101,7 @@ state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
 state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
-state.binView = oneOf(state.binView, ["value", "numbered"], "value");
+state.binView = oneOf(state.binView, ["value", "word", "numbered"], "value");
 state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
 state.folded = Array.isArray(state.folded) ? state.folded.filter((a_name) => typeof a_name === "string") : [];
 const saveState = createStateSaver(api);
@@ -146,8 +146,8 @@ byId("app").innerHTML = `
         <button data-value="path">Path</button><button data-value="name">Name</button>
       </div>
       <span class="layout-label" title="How the BIN column shows the bits">BIN</span>
-      <div class="segmented" id="binView" title="Value: the bits of the value, most significant bit on the left, the same in From and To. Numbered: BIN From and BIN To, each bit numbered in its convention (hover a bit), to see the same value labelled differently">
-        <button data-value="value">Value</button><button data-value="numbered">Numbered</button>
+      <div class="segmented" id="binView" title="Value: the bits of the value, most significant bit on the left, the same in From and To. Word: BIN From and BIN To show the whole word holding the field, the bits of the field highlighted. Numbered: BIN From and BIN To, each bit numbered in its convention (hover a bit), to see the same value labelled differently">
+        <button data-value="value">Value</button><button data-value="word">Word</button><button data-value="numbered">Numbered</button>
       </div>
       <button id="copyMarkdown" title="Copy the field table as a Markdown table (values read in the From layout)">Markdown</button><button id="copyCppComment" title="Copy the field table as a C++ comment (// lines), to paste above the structure in the code">C++ comment</button>
     </span>
@@ -519,12 +519,19 @@ function tableColumns(): IColumn[] {
   ];
   columns.push(
     { label: "HEX", title: "Value of the field in From", align: "right" },
-    { label: "OCT", title: "Value of the field in From", align: "right" }
+    { label: "OCT", title: "Value of the field in From", align: "right" },
+    { label: "Mask From", title: `Bits of the field in its word in From (${from}), as a mask on the word value: field = (word & mask) >> lowest bit of the mask`, align: "right" },
+    { label: "Mask To", title: `Bits of the field in its word in To (${to}), as a mask on the word value: field = (word & mask) >> lowest bit of the mask`, align: "right" }
   );
   if (state.binView === "numbered") {
     columns.push(
       { label: `BIN From ${from}`, title: `Bits of the value in From, most significant bit on the left, numbered in ${from} (hover a bit): ${numberingNote(state.bitOrder)}`, align: "right" },
       { label: `BIN To ${to}`, title: `Bits of the value in To, most significant bit on the left, numbered in ${to} (hover a bit): ${numberingNote(state.targetBitOrder)}`, align: "right" }
+    );
+  } else if (state.binView === "word") {
+    columns.push(
+      { label: `BIN From word ${from}`, title: `The word of the field in From, most significant bit on the left, the bits of the field highlighted (in the exports, the other bits are dots)`, align: "right" },
+      { label: `BIN To word ${to}`, title: `The word of the field in To, most significant bit on the left, the bits of the field highlighted (in the exports, the other bits are dots)`, align: "right" }
     );
   } else {
     columns.push({ label: "BIN", title: "Bits of the value, most significant bit on the left, the same in From and To", align: "right" });
@@ -542,6 +549,40 @@ function numberingNote(a_order: BitOrder): string {
 interface IValueCell {
   readonly text: string;
   readonly numbered?: { readonly digits: string; readonly numbers: number[]; readonly order: BitOrder };
+  /// Word view: the bits of the word, most significant first, and which of
+  /// them belong to the field
+  readonly word?: { readonly bits: string; readonly inField: boolean[] };
+}
+
+/// Mask of a field lying on bits a_first..a_last of its word in a_order, on
+/// the value of the word: LSB0 numbers the bits by weight, MSB0 from the
+/// most significant one.
+function fieldMask(a_first: number, a_last: number, a_order: BitOrder): string {
+  const width = state.wordBits;
+  const low = a_order === "lsb0" ? a_first : width - 1 - a_last;
+  const mask = ((1n << BigInt(a_last - a_first + 1)) - 1n) << BigInt(low);
+  return `0x${mask.toString(16).toUpperCase().padStart(width / 4, "0")}`;
+}
+
+/// BIN cell of the Word view: the word a_word of a_bytes read in a_layout,
+/// the field lying on bits a_first..a_last of it in the a_layout numbering.
+function wordCell(a_bytes: Uint8Array, a_word: number, a_first: number, a_last: number, a_layout: ILayoutOptions): IValueCell {
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  const start = a_word * wordBytes;
+  if (start + wordBytes > a_bytes.length) {
+    return { text: "—" };
+  }
+  const value = fromBytes(a_bytes.subarray(start, start + wordBytes), a_layout.endianness);
+  const width = wordBytes * 8;
+  const bits = value.toString(2).padStart(width, "0");
+  // String index i holds the bit of weight width - 1 - i; LSB0 numbers the
+  // bits by weight, MSB0 from the most significant one
+  const inField = Array.from(bits, (_, a_index) => {
+    const number = a_layout.bitOrder === "lsb0" ? width - 1 - a_index : a_index;
+    return number >= a_first && number <= a_last;
+  });
+  const masked = Array.from(bits, (a_bit, a_index) => (inField[a_index] ? a_bit : ".")).join("");
+  return { text: groupDigits(masked, 4), word: { bits, inField } };
 }
 
 /// BIN cell of a value whose field lies on bits a_first..a_last of its word.
@@ -560,22 +601,35 @@ function binCell(a_raw: bigint | undefined, a_width: number, a_first: number, a_
 
 /// Cells of a_field after DEC: HEX, OCT, then the BIN column(s) of the
 /// chosen view.
-function valueCells(a_field: IDecodedField, a_to: IDecodedField | undefined): IValueCell[] {
+function valueCells(a_model: IModel, a_field: IDecodedField, a_to: IDecodedField | undefined): IValueCell[] {
   const raw = a_field.raw;
   const toRaw = a_to?.raw;
   const cells: IValueCell[] = [];
-  cells.push(
-    { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 16, true) },
-    { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 8, false) }
-  );
   const placement = placementCells(a_field);
   const first = Number(placement[1]);
   const last = Number(placement[2]);
+  // A field wider than a word has no mask in one word
+  const spanning = placement[0].includes("–");
+  cells.push(
+    { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 16, true) },
+    { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 8, false) },
+    { text: spanning ? "—" : fieldMask(first, last, state.bitOrder) },
+    { text: spanning ? "—" : fieldMask(first, last, state.targetBitOrder) }
+  );
   if (state.binView === "numbered") {
     cells.push(
       binCell(raw, a_field.bitWidth, first, last, state.bitOrder),
       binCell(toRaw, a_field.bitWidth, first, last, state.targetBitOrder)
     );
+  } else if (state.binView === "word" && !spanning && raw !== undefined) {
+    const word = Number(placement[0]);
+    cells.push(
+      wordCell(a_model.bytes, word, first, last, sourceLayout()),
+      wordCell(a_model.converted, word, first, last, targetLayout())
+    );
+  } else if (state.binView === "word") {
+    // A field wider than a word, or missing: the bits of the field itself
+    cells.push(binCell(raw, a_field.bitWidth, first, last, undefined), binCell(toRaw, a_field.bitWidth, first, last, undefined));
   } else {
     cells.push(binCell(raw, a_field.bitWidth, first, last, undefined));
   }
@@ -586,6 +640,18 @@ function valueCells(a_field: IDecodedField, a_to: IDecodedField | undefined): IV
 /// in a tooltip and the range of numbers under the value.
 function valueElement(a_cell: IValueCell): HTMLTableCellElement {
   const cell = createElement("td", "value");
+  if (a_cell.word !== undefined) {
+    const { bits, inField } = a_cell.word;
+    const line = createElement("span", "bin-word");
+    for (let index = 0; index < bits.length; index++) {
+      if (index > 0 && (bits.length - index) % 4 === 0) {
+        line.append(" ");
+      }
+      line.append(createElement("span", inField[index] ? "bin-field" : "bin-other", bits[index]));
+    }
+    cell.append(line);
+    return cell;
+  }
   if (a_cell.numbered === undefined) {
     cell.textContent = a_cell.text;
     return cell;
@@ -615,7 +681,7 @@ function tableRows(a_model: IModel): string[][] {
     fieldLabel(a_field),
     a_field.typeName,
     a_field.raw === undefined ? "—" : displayValue(a_field),
-    ...valueCells(a_field, a_model.decodedTo[a_index]).map((a_cell) => a_cell.text)
+    ...valueCells(a_model, a_field, a_model.decodedTo[a_index]).map((a_cell) => a_cell.text)
   ]);
 }
 
@@ -673,7 +739,10 @@ function renderFields(a_model: IModel): void {
     + `Bit min / Bit max: ${bitNumbering(state.bitOrder)} in From (${state.bitOrder.toUpperCase()})`
     + (state.targetBitOrder !== state.bitOrder ? `, ${bitNumbering(state.targetBitOrder)} in To (${state.targetBitOrder.toUpperCase()})` : "")
     + ". BIN writes the value most significant bit first"
-    + (state.binView === "numbered" ? "; Numbered labels each bit with its number in each convention (hover a bit): same bits, different labels." : ".");
+    + (state.binView === "numbered" ? "; Numbered labels each bit with its number in each convention (hover a bit): same bits, different labels."
+      : state.binView === "word" ? "; Word shows the whole word in From and in To, the bits of the field highlighted."
+        : ".")
+    + " Mask From / Mask To: the bits of the field in the value of its word, field = (word & mask) >> lowest bit of the mask.";
   fieldsBody.replaceChildren();
   for (const [index, field] of a_model.decoded.entries()) {
     const row = createElement("tr", field.name === undefined ? "padding" : undefined);
@@ -692,7 +761,7 @@ function renderFields(a_model: IModel): void {
     const valueCell = createElement("td", "value");
     valueCell.append(field.enumDef !== undefined ? enumSelect(field, index) : valueInput(field, index));
     row.append(valueCell);
-    for (const cell of valueCells(field, a_model.decodedTo[index])) {
+    for (const cell of valueCells(a_model, field, a_model.decodedTo[index])) {
       row.append(valueElement(cell));
     }
     fieldsBody.append(row);

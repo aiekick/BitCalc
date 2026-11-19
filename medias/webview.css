@@ -184,3 +184,6 @@ details.fold > summary:hover { opacity: 1; }
 .bin-bit { cursor: help; }
 .bin-bit:hover { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .bin-range { display: block; font-size: 0.75em; opacity: 0.6; }
+.bin-word { white-space: nowrap; }
+.bin-word .bin-field { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.bin-word .bin-other { opacity: 0.4; }

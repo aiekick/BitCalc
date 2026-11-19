@@ -93,7 +93,7 @@ export function buildStructHelp(): HTMLElement {
     ])),
     section("Conversion", list([
       "Each field keeps its value from From to To, only its place in the bytes changes (69 stays 69).",
-      "BIN writes the value most significant bit first, the same in From and To: 69 is 0100 0101. BIN Numbered adds the number of each bit in each convention: b7 … b0 in LSB0, b0 … b7 in MSB0 for a field on bits 0-7."
+      "Mask From / Mask To give the bits of each field in the value of its word, in each layout. BIN Word shows the whole word in From and in To with the bits of the field highlighted. BIN writes the value most significant bit first, the same in From and To: 69 is 0100 0101. BIN Numbered adds the number of each bit in each convention: b7 … b0 in LSB0, b0 … b7 in MSB0 for a field on bits 0-7."
     ])),
     section("Buffer", list([
       "Hex bytes: 01 02 0A FF, 0x01, 0x02, \\x01\\x02, { 0x1, 0x2 } or 01020AFF.",
