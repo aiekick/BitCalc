@@ -620,13 +620,23 @@ function fieldMask(a_first: number, a_last: number, a_order: BitOrder): string {
   return `0x${mask.toString(16).toUpperCase().padStart(width / 4, "0")}`;
 }
 
+/// Words a field lies on, first and last.
+function fieldWords(a_field: IDecodedField): [number, number] {
+  const first = a_field.byteOffset * 8 + (a_field.bitOffset ?? 0);
+  return [Math.floor(first / state.wordBits), Math.floor((first + a_field.bitWidth - 1) / state.wordBits)];
+}
+
+/// Whether a_field is the last field of its (last) word.
+function closesWord(a_model: IModel, a_field: IDecodedField): boolean {
+  const next = a_model.decoded[a_model.decoded.indexOf(a_field) + 1];
+  return next === undefined || fieldWords(next)[0] > fieldWords(a_field)[1];
+}
+
 /// Values of the words holding a_field in a_bytes, read in a_endianness, in
 /// hex on the word size (several words for a field wider than a word).
 function wordValues(a_bytes: Uint8Array, a_field: IDecodedField, a_endianness: Endianness): string {
   const wordBytes = Math.max(1, state.wordBits / 8);
-  const first = a_field.byteOffset * 8 + (a_field.bitOffset ?? 0);
-  const firstWord = Math.floor(first / state.wordBits);
-  const lastWord = Math.floor((first + a_field.bitWidth - 1) / state.wordBits);
+  const [firstWord, lastWord] = fieldWords(a_field);
   const values: string[] = [];
   for (let word = firstWord; word <= lastWord; word++) {
     const start = word * wordBytes;
@@ -689,8 +699,9 @@ function allValueCells(a_model: IModel, a_field: IDecodedField, a_to: IDecodedFi
     { text: raw === undefined ? "—" : formatBits(raw, a_field.bitWidth, 8, false) },
     { text: spanning ? "—" : fieldMask(first, last, state.bitOrder) },
     { text: spanning ? "—" : fieldMask(first, last, state.targetBitOrder) },
-    { text: wordValues(a_model.bytes, a_field, sourceLayout().endianness) },
-    { text: wordValues(a_model.converted, a_field, targetLayout().endianness) }
+    // Once per word, on its last row
+    { text: closesWord(a_model, a_field) ? wordValues(a_model.bytes, a_field, sourceLayout().endianness) : "" },
+    { text: closesWord(a_model, a_field) ? wordValues(a_model.converted, a_field, targetLayout().endianness) : "" }
   );
   if (state.binView === "numbered") {
     cells.push(
