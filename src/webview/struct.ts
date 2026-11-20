@@ -1129,43 +1129,111 @@ function findNode(a_nodes: readonly IFieldNode[], a_path: string): IFieldNode | 
   return undefined;
 }
 
+/// Value of the Show list for the whole message; "" is the default, the
+/// words of the fields shown in the table.
+const SCOPE_WHOLE = "*";
+
 interface IDataScope {
-  /// bytes of the structure shown, from start to end (excluded), whole words
-  readonly start: number;
-  readonly end: number;
+  /// words of the message shown, in order (not always contiguous)
+  readonly words: number[];
+  /// the whole message, with the bytes before and after it in the From buffer
+  readonly whole: boolean;
   readonly label: string;
 }
 
-/// Part of the structure the buffers and the byte grid show.
-function dataScope(a_model: IModel): IDataScope {
-  const all = { start: 0, end: a_model.size, label: "all" };
-  const node = state.dataScope === "" ? undefined : findNode(a_model.tree, state.dataScope);
-  if (node === undefined || node.kind === "leaf") {
-    return all;
-  }
-  let part = node;
-  let label = node.path;
-  if (node.kind === "array") {
-    const [min, max] = arrayRange(node);
-    part = { ...node, firstSlot: node.children[min].firstSlot, lastSlot: node.children[max].lastSlot };
-    label = `${node.path}[${min}..${max}]`;
-  }
-  const extent = nodeExtent(a_model, part);
-  const wordBytes = Math.max(1, state.wordBits / 8);
+/// Words a node covers (a structure fills whole words).
+function nodeWords(a_model: IModel, a_node: IFieldNode): [number, number] {
+  const extent = nodeExtent(a_model, a_node);
   const first = extent.byteOffset * 8 + (extent.bitOffset ?? 0);
-  const start = Math.floor(first / 8 / wordBytes) * wordBytes;
-  const end = Math.min(a_model.size, Math.ceil((first + extent.bitWidth) / 8 / wordBytes) * wordBytes);
-  return { start, end, label };
+  return [Math.floor(first / state.wordBits), Math.floor((first + extent.bitWidth - 1) / state.wordBits)];
 }
 
-/// Choices of the Show list: all, then the structures and arrays of the
-/// tree (not the elements of the arrays: an array shows the elements chosen
-/// in the table).
+/// Part of the structure the buffers and the byte grid show: by default the
+/// words of the rows shown in the table (fields, folded structures; a folded
+/// array is left out), or the whole message, or a structure or an array of
+/// the tree (for an array, the elements shown in the table).
+function dataScope(a_model: IModel): IDataScope {
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  const count = Math.ceil(a_model.size / wordBytes);
+  const range = (a_first: number, a_last: number): number[] => Array.from({ length: Math.max(0, a_last - a_first + 1) }, (_, a_index) => a_first + a_index);
+  if (state.dataScope === SCOPE_WHOLE) {
+    return { words: range(0, count - 1), whole: true, label: "whole message" };
+  }
+  const node = state.dataScope === "" ? undefined : findNode(a_model.tree, state.dataScope);
+  if (node !== undefined && node.kind !== "leaf") {
+    if (node.kind === "array") {
+      const [min, max] = arrayRange(node);
+      const [first] = nodeWords(a_model, { ...node, firstSlot: node.children[min].firstSlot, lastSlot: node.children[min].lastSlot });
+      const [, last] = nodeWords(a_model, { ...node, firstSlot: node.children[max].firstSlot, lastSlot: node.children[max].lastSlot });
+      return { words: range(first, last), whole: false, label: `${node.path}[${min}..${max}]` };
+    }
+    const [first, last] = nodeWords(a_model, node);
+    return { words: range(first, last), whole: false, label: node.path };
+  }
+  // Default: the words of what the table shows
+  const shown = new Set<number>();
+  for (const { node: row } of treeRows(a_model.tree)) {
+    if (row.slot !== undefined) {
+      const [first, last] = fieldWords(a_model.decoded[row.slot]);
+      range(first, last).forEach((a_word) => shown.add(a_word));
+    } else if (row.kind !== "array" && !isOpen(row)) {
+      const [first, last] = nodeWords(a_model, row);
+      range(first, last).forEach((a_word) => shown.add(a_word));
+    }
+  }
+  const words = [...shown].filter((a_word) => a_word < count).sort((a_left, a_right) => a_left - a_right);
+  return { words, whole: false, label: "shown in the table" };
+}
+
+/// Bytes of the scope taken from a_bytes (bytes of the structure), word
+/// after word.
+function scopeBytes(a_bytes: Uint8Array, a_scope: IDataScope, a_size: number): Uint8Array {
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  const parts: number[] = [];
+  for (const word of a_scope.words) {
+    for (let offset = word * wordBytes; offset < Math.min((word + 1) * wordBytes, a_size); offset++) {
+      parts.push(offset < a_bytes.length ? a_bytes[offset] : 0);
+    }
+  }
+  return Uint8Array.from(parts);
+}
+
+/// Write a_typed into the scope words of a_target (bytes of the structure),
+/// word after word, as far as a_typed goes.
+function writeScopeBytes(a_target: Uint8Array, a_typed: Uint8Array, a_scope: IDataScope, a_size: number): void {
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  let next = 0;
+  for (const word of a_scope.words) {
+    for (let offset = word * wordBytes; offset < Math.min((word + 1) * wordBytes, a_size) && next < a_typed.length; offset++) {
+      a_target[offset] = a_typed[next++];
+    }
+  }
+}
+
+/// Words of the scope as a short text: "0-2, 5, 9-10".
+function wordsText(a_words: readonly number[]): string {
+  const parts: string[] = [];
+  for (let index = 0; index < a_words.length; index++) {
+    let end = index;
+    while (end + 1 < a_words.length && a_words[end + 1] === a_words[end] + 1) {
+      end++;
+    }
+    parts.push(end === index ? String(a_words[index]) : `${a_words[index]}-${a_words[end]}`);
+    index = end;
+  }
+  return parts.join(", ");
+}
+
+/// Choices of the Show list: what the table shows (default), the whole
+/// message, then the structures and arrays of the tree (not the elements of
+/// the arrays: an array shows the elements chosen in the table).
 function fillScopeSelect(a_model: IModel): void {
   const options: HTMLOptionElement[] = [];
-  const all = createElement("option", undefined, `All (${a_model.size} bytes)`);
-  all.value = "";
-  options.push(all);
+  const shown = createElement("option", undefined, "Shown in the table");
+  shown.value = "";
+  const whole = createElement("option", undefined, `Whole message (${a_model.size} bytes)`);
+  whole.value = SCOPE_WHOLE;
+  options.push(shown, whole);
   const walk = (a_nodes: readonly IFieldNode[], a_depth: number): void => {
     for (const node of a_nodes) {
       if (node.kind === "struct" || node.kind === "array") {
@@ -1209,13 +1277,13 @@ function renderBuffers(a_model: IModel): void {
   refreshDataButton.classList.remove("stale");
   fillScopeSelect(a_model);
   const scope = dataScope(a_model);
-  const whole = scope.start === 0 && scope.end === a_model.size;
+  const whole = scope.whole;
   // The From buffer shows the bytes up to the end of the structure, as the
   // To buffer does; bytes after it are kept but not shown, and dropped as
   // soon as the From buffer is edited.
   const shownLength = Math.min(a_model.allBytes.length, state.offset + a_model.size);
   const hidden = a_model.allBytes.length - shownLength;
-  const part = whole ? "" : `, bytes ${scope.start} to ${scope.end - 1} (${scope.label})`;
+  const part = whole ? "" : `, words ${wordsText(scope.words) || "none"} (${scope.label})`;
   bufferLabel.textContent = `From ${layoutName(sourceLayout())}${part}`
     + (whole && hidden > 0 ? ` (${hidden} byte${hidden === 1 ? "" : "s"} after the structure not shown)` : "");
   bufferLabel.title = whole && hidden > 0 ? "The buffer holds more bytes than the structure; editing the From buffer drops them" : "";
@@ -1232,7 +1300,7 @@ function renderBuffers(a_model: IModel): void {
   if (document.activeElement !== bufferInput) {
     const fromBytes = whole
       ? a_model.allBytes.subarray(0, shownLength)
-      : a_model.allBytes.subarray(state.offset + scope.start, Math.min(a_model.allBytes.length, state.offset + scope.end));
+      : scopeBytes(a_model.bytes, scope, a_model.size);
     bufferInput.value = formatBuffer(fromBytes, state.bufferFormat, BUFFER_WORD_ORDER);
     bufferInput.classList.remove("invalid");
     bufferInput.title = "";
@@ -1241,7 +1309,7 @@ function renderBuffers(a_model: IModel): void {
     ? "01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"
     : `Hex words, e.g. ${formatBuffer([0xFA, 0x00, 0x12, 0x34], state.bufferFormat, BUFFER_WORD_ORDER)}`;
   if (document.activeElement !== targetBufferInput) {
-    targetBufferInput.value = formatBuffer(a_model.converted.subarray(scope.start, scope.end), state.bufferFormat, BUFFER_WORD_ORDER);
+    targetBufferInput.value = formatBuffer(scopeBytes(a_model.converted, scope, a_model.size), state.bufferFormat, BUFFER_WORD_ORDER);
     targetBufferInput.classList.remove("invalid");
   }
 }
@@ -1259,8 +1327,7 @@ function renderGrid(a_model: IModel): void {
 /// first drawn on one line to measure its cells.
 function renderByteGrid(a_model: IModel): void {
   const wordBytes = Math.max(1, state.wordBits / 8);
-  const scope = dataScope(a_model);
-  const words = Math.max(1, Math.ceil((scope.end - scope.start) / wordBytes));
+  const words = Math.max(1, dataScope(a_model).words.length);
   // Measure the cells on a sample, the last word (its offsets are the
   // widest), rather than drawing the whole grid twice
   const sample = gridLines(a_model, 1);
@@ -1297,9 +1364,7 @@ interface IGridSide {
 /// the From side then the To side, each word most significant byte first.
 function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
   const wordBytes = Math.max(1, state.wordBits / 8);
-  const scope = dataScope(a_model);
-  const firstScopeWord = Math.floor(scope.start / wordBytes);
-  const words = Math.ceil(scope.end / wordBytes);
+  const scopeWords = dataScope(a_model).words;
   const fromAt = (a_offset: number): number | undefined => (a_offset < a_model.bytes.length ? a_model.bytes[a_offset] : undefined);
   const toAt = (a_offset: number): number | undefined => a_model.converted[a_offset];
   const sides = [
@@ -1307,11 +1372,11 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
     { label: `To ${layoutName(targetLayout())}`, endianness: state.targetEndianness, at: toAt, other: fromAt, missing: false }
   ];
   const lines: IGridSide[][] = [];
-  for (let firstWord = firstScopeWord; firstWord < words; firstWord += a_wordsPerRow) {
-    const lastWord = Math.min(firstWord + a_wordsPerRow, words);
+  for (let lineStart = 0; lineStart < scopeWords.length; lineStart += a_wordsPerRow) {
+    const lineWords = scopeWords.slice(lineStart, lineStart + a_wordsPerRow);
     lines.push(sides.map((a_side) => {
       const cells: IGridCell[] = [];
-      for (let word = firstWord; word < lastWord; word++) {
+      for (const word of lineWords) {
         wordOrder(word, wordBytes, state.gridOrder === "memory" ? "big" : a_side.endianness).forEach((a_offset, a_index) => {
           if (a_offset >= a_model.size) {
             return;
@@ -1322,7 +1387,7 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
             byte: value === undefined ? "--" : hex2(value),
             changed: value !== a_side.other(a_offset),
             missing: value === undefined && a_side.missing,
-            wordStart: a_index === 0 && word > firstWord
+            wordStart: a_index === 0 && word !== lineWords[0]
           });
         });
       }
@@ -1509,12 +1574,12 @@ targetBufferInput.addEventListener("input", () => {
   }
   targetBufferInput.classList.remove("invalid");
   targetBufferInput.title = "";
-  // Typed bytes replace the part shown (all of it by default) of the To
-  // structure, converted back into the From buffer
+  // Typed bytes replace the words shown of the To structure, converted back
+  // into the From buffer
   const scope = dataScope(model);
   const toBytes = new Uint8Array(model.size);
   toBytes.set(model.converted);
-  toBytes.set(typed.bytes.subarray(0, scope.end - scope.start), scope.start);
+  writeScopeBytes(toBytes, typed.bytes, scope, model.size);
   const fromBytes = convertStruct(model.fields, toBytes, targetLayout(), sourceLayout(), model.alignment);
   const required = state.offset + model.size;
   const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
@@ -1544,14 +1609,15 @@ bufferInput.addEventListener("input", () => {
     return;
   }
   const scope = dataScope(model);
-  if (scope.start === 0 && scope.end === model.size) {
+  if (scope.whole) {
     state.buffer = formatHexBytes(typed.bytes);
   } else {
-    // Typed bytes replace the part shown
+    // Typed bytes replace the words shown
     const required = state.offset + model.size;
     const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
     bytes.set(model.allBytes);
-    bytes.set(typed.bytes.subarray(0, scope.end - scope.start), state.offset + scope.start);
+    const structBytes = bytes.subarray(state.offset, required);
+    writeScopeBytes(structBytes, typed.bytes, scope, model.size);
     state.buffer = formatHexBytes(bytes);
   }
   update();
@@ -1761,13 +1827,13 @@ for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("bu
     }
     const [which, kind] = (button.dataset.copy ?? "").split("-");
     const scope = dataScope(model);
-    const bytes = which === "to" ? model.converted.subarray(scope.start, scope.end) : model.bytes.subarray(scope.start, scope.end);
+    const bytes = scopeBytes(which === "to" ? model.converted : model.bytes, scope, model.size);
     const wordBytes = Math.max(1, state.wordBits / 8);
     api.postMessage({
       type: "copy",
       // The C array has one word of the message per line, numbered
       text: kind === "c"
-        ? formatBufferCArrayByWord(bytes, state.bufferFormat, BUFFER_WORD_ORDER, wordBytes, scope.start / wordBytes)
+        ? formatBufferCArrayByWord(bytes, state.bufferFormat, BUFFER_WORD_ORDER, wordBytes, scope.words)
         : formatBuffer(bytes, state.bufferFormat, BUFFER_WORD_ORDER)
     });
   });

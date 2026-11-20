@@ -10,6 +10,8 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Struct Decoder: **Set all DEC** buttons: **0**, **Min**, **Max** and **Random** set every field of the structure (array elements not shown included) to 0, to the smallest or largest value of its type (integers on their width, enums on their enumerators, bools, finite floats), or to a random value (random bits, a random enumerator, a float between -1000 and 1000).
 
+- Struct Decoder: the buffers and the byte grid show by default only the words of the rows shown in the table (**Shown in the table** in the Show list): with one element of a large array shown, they show that element. **Whole message** shows everything, as before.
+
 ### Fixed
 
 - Struct Decoder: opening or refreshing the buffers of a large message froze the view for seconds: the buffer formatting copied the whole buffer for each byte or word (quadratic time). 8 KB now format in a few milliseconds.
