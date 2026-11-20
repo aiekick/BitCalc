@@ -76,8 +76,10 @@ interface IStructState {
   dataScope: string;
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
-  /// buffer, offset, tree and Show scope of the other structures of the
-  /// definition, by name: each message keeps its own values
+  /// buffer, offset, tree and Show scope of each structure of the
+  /// definition, by name: each message keeps its own values. The entry of
+  /// the decoded structure is updated when leaving it or saving a file; the
+  /// fields above are its live values.
   messages: Record<string, IMessageState>;
 }
 
@@ -1688,7 +1690,6 @@ rootSelect.addEventListener("change", () => {
     state.messages[model.name] = { buffer: state.buffer, offset: state.offset, tree: state.tree, dataScope: state.dataScope };
   }
   const saved = state.messages[rootSelect.value];
-  delete state.messages[rootSelect.value];
   state.rootStruct = rootSelect.value;
   state.buffer = typeof saved?.buffer === "string" ? saved.buffer : "";
   state.offset = Number.isInteger(saved?.offset) && (saved?.offset ?? 0) >= 0 ? saved?.offset ?? 0 : 0;
@@ -1982,5 +1983,11 @@ for (const fold of Array.from(document.querySelectorAll<HTMLDetailsElement>("det
 }
 update();
 refreshOpenSections();
-bindPresetBar(api, state);
+// The file lists every message, the current one included, under its name
+bindPresetBar(api, state, () => ({
+  ...state,
+  messages: model?.name !== undefined
+    ? { ...state.messages, [model.name]: { buffer: state.buffer, offset: state.offset, tree: state.tree, dataScope: state.dataScope } }
+    : state.messages
+}));
 api.postMessage({ type: "ready" });

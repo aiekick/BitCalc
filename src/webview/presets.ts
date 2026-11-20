@@ -34,7 +34,9 @@ export const PRESET_BAR_HTML = `
 /// Wire the configuration bar of PRESET_BAR_HTML. The host keeps the files:
 /// saving sends it the current state, loading has it set the state of both
 /// views and reload them.
-export function bindPresetBar<TState>(a_api: IVsCodeApi<TState>, a_state: TState): void {
+/// a_snapshot, when given, builds the state written to the file instead of
+/// a_state.
+export function bindPresetBar<TState>(a_api: IVsCodeApi<TState>, a_state: TState, a_snapshot?: () => TState): void {
   let list = readPresetList();
   const select = byId<HTMLSelectElement>("presetSelect");
   const nameInput = byId<HTMLInputElement>("presetName");
@@ -81,7 +83,7 @@ export function bindPresetBar<TState>(a_api: IVsCodeApi<TState>, a_state: TState
       return;
     }
     nameInput.classList.remove("invalid");
-    a_api.postMessage({ type: "presetSave", name, state: JSON.parse(JSON.stringify(a_state)) });
+    a_api.postMessage({ type: "presetSave", name, state: JSON.parse(JSON.stringify(a_snapshot !== undefined ? a_snapshot() : a_state)) });
   };
 
   saveButton.addEventListener("click", save);
