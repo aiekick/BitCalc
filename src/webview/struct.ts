@@ -76,6 +76,17 @@ interface IStructState {
   dataScope: string;
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
+  /// buffer, offset, tree and Show scope of the other structures of the
+  /// definition, by name: each message keeps its own values
+  messages: Record<string, IMessageState>;
+}
+
+/// What belongs to one message of the definition
+interface IMessageState {
+  buffer: string;
+  offset: number;
+  tree: IStructState["tree"];
+  dataScope: string;
 }
 
 type NameMode = "path" | "name";
@@ -131,6 +142,7 @@ const state: IStructState = {
   hiddenColumns: ["wordFrom", "wordTo"],
   tree: {},
   dataScope: "",
+  messages: {},
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -149,6 +161,7 @@ state.binView = oneOf(state.binView, ["value", "word", "numbered"], "value");
 state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
 state.dataScope = typeof state.dataScope === "string" ? state.dataScope : "";
 state.tree = typeof state.tree === "object" && state.tree !== null && !Array.isArray(state.tree) ? state.tree : {};
+state.messages = typeof state.messages === "object" && state.messages !== null && !Array.isArray(state.messages) ? state.messages : {};
 state.hiddenColumns = Array.isArray(state.hiddenColumns)
   ? state.hiddenColumns.filter((a_key) => OPTIONAL_COLUMNS.some((a_column) => a_column.key === a_key))
   : [];
@@ -1667,9 +1680,23 @@ bufferFormatSelect.addEventListener("change", () => {
   update();
   refreshOpenSections();
 });
+/// Switch to another structure of the definition: the buffer, offset, tree
+/// and Show scope of the current one are kept under its name, those of the
+/// chosen one come back (a zeroed buffer the first time).
 rootSelect.addEventListener("change", () => {
+  if (model?.name !== undefined) {
+    state.messages[model.name] = { buffer: state.buffer, offset: state.offset, tree: state.tree, dataScope: state.dataScope };
+  }
+  const saved = state.messages[rootSelect.value];
+  delete state.messages[rootSelect.value];
   state.rootStruct = rootSelect.value;
+  state.buffer = typeof saved?.buffer === "string" ? saved.buffer : "";
+  state.offset = Number.isInteger(saved?.offset) && (saved?.offset ?? 0) >= 0 ? saved?.offset ?? 0 : 0;
+  state.tree = typeof saved?.tree === "object" && saved.tree !== null ? saved.tree : {};
+  state.dataScope = typeof saved?.dataScope === "string" ? saved.dataScope : "";
+  offsetInput.value = String(state.offset);
   update();
+  refreshOpenSections();
 });
 offsetInput.addEventListener("input", () => {
   const offset = Number(offsetInput.value);
@@ -1889,6 +1916,8 @@ templateSelect.addEventListener("change", () => {
     return;
   }
   replaceDefinition(template.definition);
+  // the saved messages belong to the replaced definition
+  state.messages = {};
   state.endianness = template.endianness ?? state.endianness;
   state.bitOrder = template.bitOrder ?? state.bitOrder;
   showLayouts();
