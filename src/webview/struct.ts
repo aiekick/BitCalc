@@ -1,6 +1,6 @@
 import { BitOrder, Endianness, formatBits, fromBytes, groupDigits } from "../utils/bits";
 import { parseFieldInput } from "../utils/fieldInput";
-import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
+import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArrayByWord, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
 import { formatDeclarations } from "../utils/structFormat";
 import { IAssignment, generateCode } from "../utils/codeExport";
@@ -237,14 +237,14 @@ byId("app").innerHTML = `
       <label class="section-title" for="buffer" id="bufferLabel"></label>
       <label class="offset-label" title="Number of bytes skipped before the structure">Offset <input type="number" id="offset" min="0" class="offset"></label>
       <span class="copy-group">
-        <button data-copy="from-text" title="Copy the structure bytes in the chosen format">Copy</button><button data-copy="from-c" title="Copy the structure bytes as a C array in the chosen format">C array</button>
+        <button data-copy="from-text" title="Copy the structure bytes in the chosen format">Copy</button><button data-copy="from-c" title="Copy the structure bytes as a C array in the chosen format, one word of the message per line with a // word n comment">C array</button>
       </span>
     </div>
     <textarea id="buffer" spellcheck="false" rows="3"></textarea>
     <div class="pane-header">
       <label class="section-title" for="targetBuffer" id="targetBufferLabel"></label>
       <span class="copy-group">
-        <button data-copy="to-text" title="Copy the converted bytes in the chosen format">Copy</button><button data-copy="to-c" title="Copy the converted bytes as a C array in the chosen format">C array</button>
+        <button data-copy="to-text" title="Copy the converted bytes in the chosen format">Copy</button><button data-copy="to-c" title="Copy the converted bytes as a C array in the chosen format, one word of the message per line with a // word n comment">C array</button>
       </span>
     </div>
     <textarea id="targetBuffer" spellcheck="false" rows="3" title="The data in the To layout. Edit it to rewrite the From data through the reverse conversion"></textarea>
@@ -1695,9 +1695,13 @@ for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("bu
     const [which, kind] = (button.dataset.copy ?? "").split("-");
     const scope = dataScope(model);
     const bytes = which === "to" ? model.converted.subarray(scope.start, scope.end) : model.bytes.subarray(scope.start, scope.end);
+    const wordBytes = Math.max(1, state.wordBits / 8);
     api.postMessage({
       type: "copy",
-      text: kind === "c" ? formatBufferCArray(bytes, state.bufferFormat, BUFFER_WORD_ORDER) : formatBuffer(bytes, state.bufferFormat, BUFFER_WORD_ORDER)
+      // The C array has one word of the message per line, numbered
+      text: kind === "c"
+        ? formatBufferCArrayByWord(bytes, state.bufferFormat, BUFFER_WORD_ORDER, wordBytes, scope.start / wordBytes)
+        : formatBuffer(bytes, state.bufferFormat, BUFFER_WORD_ORDER)
     });
   });
 }

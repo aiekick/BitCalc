@@ -4,6 +4,12 @@ All notable changes to the "BitCalc" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.5] - 2026-11-20
+
+### Changed
+
+- Struct Decoder: the **C array** copies of the buffers have one word of the message per line (4 bytes with 32-bit words), each line ending with a `// word n` comment.
+
 ## [0.0.4] - 2026-11-19
 
 ### Changed

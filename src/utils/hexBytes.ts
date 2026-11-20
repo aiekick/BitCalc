@@ -123,3 +123,18 @@ export function parseBuffer(a_text: string, a_format: BufferFormat, a_endianness
   }
   return { bytes: Uint8Array.from(bytes), error: undefined };
 }
+
+/// C array of a buffer, one word of the message per line (a_wordBytes
+/// bytes), each line ending with "// word n", n counted from a_firstWord.
+/// The values are written in a_format; the bytes format writes 0xFA.
+export function formatBufferCArrayByWord(a_bytes: ArrayLike<number>, a_format: BufferFormat, a_endianness: Endianness, a_wordBytes: number, a_firstWord = 0): string {
+  const bytes = Array.from(a_bytes);
+  const step = Math.max(1, a_wordBytes);
+  const rows: string[] = [];
+  for (let start = 0; start < bytes.length; start += step) {
+    rows.push(`${bufferTokens(bytes.slice(start, start + step), a_format === "bytes" ? "bytes0x" : a_format, a_endianness).join(", ")},`);
+  }
+  const width = Math.max(0, ...rows.map((a_row) => a_row.length));
+  const lines = rows.map((a_row, a_index) => `    ${a_row.padEnd(width)} // word ${a_firstWord + a_index}`);
+  return `{\n${lines.join("\n")}\n}`;
+}

@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { BUFFER_FORMATS, formatBuffer, formatBufferCArray, formatHexBytes, parseBuffer, parseHexBytes } from "../src/utils/hexBytes";
+import { BUFFER_FORMATS, formatBuffer, formatBufferCArray, formatBufferCArrayByWord, formatHexBytes, parseBuffer, parseHexBytes } from "../src/utils/hexBytes";
 
 describe("parseHexBytes", () => {
   test("accepts the usual notations", () => {
@@ -40,6 +40,23 @@ describe("buffer formats", () => {
     assert.deepEqual(Array.from(parseBuffer("0x1, 0xFA00", "words16", "big").bytes), [0x00, 0x01, 0xFA, 0x00]);
     assert.match(parseBuffer("0x12345", "words16", "big").error ?? "", /does not fit in 16 bits/);
     assert.match(parseBuffer("0xZZ", "words16", "big").error ?? "", /not a hex word/);
+  });
+
+  test("formatBufferCArrayByWord: one word of the message per line", () => {
+    const message = [0x45, 0x03, 0x00, 0x00, 0x60, 0xA0, 0x01, 0x00, 0x2A];
+    assert.equal(formatBufferCArrayByWord(message, "bytes", "big", 4, 2), [
+      "{",
+      "    0x45, 0x03, 0x00, 0x00, // word 2",
+      "    0x60, 0xA0, 0x01, 0x00, // word 3",
+      "    0x2A,                   // word 4",
+      "}"
+    ].join("\n"));
+    assert.equal(formatBufferCArrayByWord(message.slice(0, 8), "words16", "big", 4), [
+      "{",
+      "    0x4503, 0x0000, // word 0",
+      "    0x60A0, 0x0100, // word 1",
+      "}"
+    ].join("\n"));
   });
 
   test("formatBufferCArray", () => {
