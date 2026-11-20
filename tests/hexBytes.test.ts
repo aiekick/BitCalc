@@ -66,6 +66,14 @@ describe("buffer formats", () => {
       "    0x60A0, 0x0100, // word 1",
       "}"
     ].join("\n"));
+    assert.equal(formatBufferCArrayByWord(message.slice(0, 8), "bytes", "big", 4, [3, 5], new Map([[3, "header"], [5, "tracks[0], crc"]])), [
+      "{",
+      "    // header",
+      "    0x45, 0x03, 0x00, 0x00, // word 3",
+      "    // tracks[0], crc",
+      "    0x60, 0xA0, 0x01, 0x00, // word 5",
+      "}"
+    ].join("\n"));
   });
 
   test("formatBufferCArray", () => {

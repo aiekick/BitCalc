@@ -1190,6 +1190,29 @@ function nodeWords(a_model: IModel, a_node: IFieldNode): [number, number] {
   return [Math.floor(first / state.wordBits), Math.floor((first + extent.bitWidth - 1) / state.wordBits)];
 }
 
+/// Names of the blocks of the message by their first word, for the C array:
+/// each field, structure and array of the top level, and each element of an
+/// array of structures; several starting in one word are joined.
+function blockLabels(a_model: IModel): Map<number, string> {
+  const labels = new Map<number, string>();
+  const add = (a_node: IFieldNode, a_name: string): void => {
+    if (a_name === "") {
+      return;
+    }
+    const word = nodeWords(a_model, a_node)[0];
+    const previous = labels.get(word);
+    labels.set(word, previous !== undefined ? `${previous}, ${a_name}` : a_name);
+  };
+  for (const node of a_model.tree) {
+    if (node.kind === "array" && node.children[0]?.kind === "element") {
+      node.children.forEach((a_element) => add(a_element, a_element.path));
+    } else {
+      add(node, node.path);
+    }
+  }
+  return labels;
+}
+
 /// Part of the structure the buffers and the byte grid show: by default the
 /// words of the rows shown in the table (fields, folded structures; a folded
 /// array is left out), or the whole message, or a structure or an array of
@@ -1888,7 +1911,7 @@ for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("bu
       type: "copy",
       // The C array has one word of the message per line, numbered
       text: kind === "c"
-        ? formatBufferCArrayByWord(bytes, state.bufferFormat, BUFFER_WORD_ORDER, wordBytes, scope.words)
+        ? formatBufferCArrayByWord(bytes, state.bufferFormat, BUFFER_WORD_ORDER, wordBytes, scope.words, blockLabels(model))
         : formatBuffer(bytes, state.bufferFormat, BUFFER_WORD_ORDER)
     });
   });

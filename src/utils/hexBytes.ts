@@ -141,7 +141,12 @@ export function parseBuffer(a_text: string, a_format: BufferFormat, a_endianness
 /// bytes), each line ending with "// word n": n counted from a_words, or
 /// taken from a_words when it lists the word numbers (words not contiguous).
 /// The values are written in a_format; the bytes format writes 0xFA.
-export function formatBufferCArrayByWord(a_bytes: ArrayLike<number>, a_format: BufferFormat, a_endianness: Endianness, a_wordBytes: number, a_words: number | readonly number[] = 0): string {
+/// a_labels, by word number, gives a comment line written before the word
+/// (the name of the block starting there).
+export function formatBufferCArrayByWord(
+  a_bytes: ArrayLike<number>, a_format: BufferFormat, a_endianness: Endianness, a_wordBytes: number,
+  a_words: number | readonly number[] = 0, a_labels?: ReadonlyMap<number, string>
+): string {
   const bytes = Array.from(a_bytes);
   const step = Math.max(1, a_wordBytes);
   const rows: string[] = [];
@@ -150,6 +155,11 @@ export function formatBufferCArrayByWord(a_bytes: ArrayLike<number>, a_format: B
   }
   const width = Math.max(0, ...rows.map((a_row) => a_row.length));
   const wordNumber = (a_index: number): number => (typeof a_words === "number" ? a_words + a_index : a_words[a_index] ?? a_index);
-  const lines = rows.map((a_row, a_index) => `    ${a_row.padEnd(width)} // word ${wordNumber(a_index)}`);
+  const lines = rows.flatMap((a_row, a_index) => {
+    const word = wordNumber(a_index);
+    const label = a_labels?.get(word);
+    const line = `    ${a_row.padEnd(width)} // word ${word}`;
+    return label !== undefined ? [`    // ${label}`, line] : [line];
+  });
   return `{\n${lines.join("\n")}\n}`;
 }
