@@ -116,7 +116,7 @@ Each row shows the **Word** holding the field, counted from 0, **Bit min** and *
 
 **Names**, at the right of the summary line, chooses how the fields of nested structures are named: **Path** gives their whole path (`header.version`), **Name** only their own name (`version`), with the path in the tooltip. The exports use the same names.
 
-**Markdown**, next to it, copies the field table as a Markdown table, under a line giving the structure, its From layout and its size in words, ready to paste in a document or a review. **CSV** copies it as CSV, cells separated by `;`, ready to paste in a spreadsheet. **C++ comment** copies the same table as `//` lines with aligned columns, in ASCII only, to paste above the structure in the code.
+**Markdown**, next to it, copies the field table as a Markdown table, under a line giving the structure, its From layout and its size in words, ready to paste in a document or a review. **CSV** copies it as CSV, cells separated by `;`, ready to paste in a spreadsheet. **C code** copies C code that declares an object of the structure, zeroed, and assigns the fields shown in the table their DEC values (`Message message = {0};` then `message.header.type = MSG_PING;`...): enums by their enumerator, bools as `true` / `false`, 64-bit values with a `LL` / `ULL` suffix. Folded structures and array elements not shown stay 0. Other languages can be added on the same model. **C++ comment** copies the same table as `//` lines with aligned columns, in ASCII only, to paste above the structure in the code.
 
 ### Converting between layouts
 

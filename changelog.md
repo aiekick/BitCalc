@@ -11,6 +11,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - Struct Decoder: the field table is a tree. Nested structures and arrays (of structures or of scalars) are rows of their own, with their word, first and last bit, size in bits and type (`Header`, `Sensor[8]`), and fold to hide their content. An open array shows its elements from a first to a last index, two fields on its row (element 0 by default); each element of an array of structures is a foldable row too. The exports follow the tree: a folded structure is one row giving its place and size. Large arrays no longer fill the table with thousands of rows.
 - Struct Decoder: the Data and Byte by byte sections are folded by default, drawn when opened and no longer updated on each change: a **Refresh** button in each draws them again (highlighted when out of date). A **Show** list limits the buffers, their copies and the byte grid to a structure or an array (its elements shown in the table) instead of the whole message; typing in a limited buffer replaces that part. Large messages no longer freeze the view.
 - Templates: **Array of structures**, a report holding 8 sensor structures.
+- Struct Decoder: **C code** export: C code declaring an object of the structure, zeroed, and assigning the fields shown in the table their DEC values (enumerators by name, bools, 64-bit suffixes), for unit tests.
 
 ## [0.0.3] - 2026-11-19
 
