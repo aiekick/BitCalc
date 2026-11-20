@@ -96,6 +96,8 @@ Not supported yet, to be added on request:
 - typedefs of arrays: `typedef P PArr[2];`;
 - pointers and unions.
 
+**Large messages**: the Data and Byte by byte sections are folded by default and drawn only when opened; they are not updated on each change, a **Refresh** button in each draws them again (it is highlighted when they are out of date). **Show**, in the Data section, limits the buffers and the byte grid to a structure or an array of the tree (for an array, the elements shown in the table) instead of the whole message: typing in a limited buffer replaces that part of the message, and the copy buttons copy that part.
+
 **Data**: the view reads from top to bottom: the declarations, the field table of the decoded structure, then the **Data of <structure>** section holding the bytes it is decoded from. They are written as `01 02 0A FF`, `0x01, 0x02`, `\x01\x02`, `{ 0x1, 0x2 }` or `01020AFF`; **Offset** skips the given number of bytes before the structure. The From buffer always covers the whole structure, as the To buffer does: when it is shorter, it is completed with zeros as soon as it is not being typed in (while typing, both titles say how many bytes are missing). Both buffers stop at the end of the structure; bytes after it, left by a larger structure or a longer paste, are kept but not shown (the From label gives their count) and dropped as soon as the From buffer is edited.
 
 **Layout rules**: the structure is laid out as in an interface control document (ICD), in absolute terms, with no compiler rule. The message is a sequence of words whose size is chosen with **Word** in the toolbar (8, 16, 32 or 64 bits, 32 by default):

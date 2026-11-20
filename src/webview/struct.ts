@@ -68,6 +68,10 @@ interface IStructState {
   /// is open (open by default), and the first and last elements shown of an
   /// array (element 0 by default)
   tree: Record<string, { open?: boolean; min?: number; max?: number }>;
+  /// part of the message the buffers and the byte grid show: "" for all of
+  /// it, or the path of a structure or an array of the tree (for an array,
+  /// the elements shown in the table)
+  dataScope: string;
   /// sections folded by the user: "structure", "table", "buffers", "grid"
   folded: string[];
 }
@@ -118,11 +122,13 @@ const state: IStructState = {
   rootStruct: "",
   wordBits: 32,
   nameMode: "path",
-  folded: [],
+  // the buffers and the byte grid can be heavy: folded until asked for
+  folded: ["buffers", "grid"],
   binView: "value",
   gridOrder: "word",
   hiddenColumns: ["wordFrom", "wordTo"],
   tree: {},
+  dataScope: "",
   bufferFormat: "bytes",
   ...readStartState<IStructState>(api)
 };
@@ -139,6 +145,7 @@ state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
 state.binView = oneOf(state.binView, ["value", "word", "numbered"], "value");
 state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
+state.dataScope = typeof state.dataScope === "string" ? state.dataScope : "";
 state.tree = typeof state.tree === "object" && state.tree !== null && !Array.isArray(state.tree) ? state.tree : {};
 state.hiddenColumns = Array.isArray(state.hiddenColumns)
   ? state.hiddenColumns.filter((a_key) => OPTIONAL_COLUMNS.some((a_column) => a_column.key === a_key))
@@ -210,6 +217,10 @@ byId("app").innerHTML = `
     <details class="fold" data-fold="buffers" open>
     <summary class="data-title" id="dataTitle"></summary>
     <div class="pane-header">
+      <label class="offset-label" title="Part of the message the buffers and the byte grid show: all of it, or a structure or an array (for an array, the elements shown in the table)">Show
+        <select id="dataScope"></select>
+      </label>
+      <button id="refreshData" title="Compute the buffers again from the current values (they are not updated on each change, to keep large messages fast)">Refresh</button>
       <label class="offset-label" title="How both buffers are shown, typed and copied; the words group the bytes in the order of the buffer (45 03 00 00 is 0x45030000), whatever the byte order of the layout">Format
         <select id="bufferFormat">
           <option value="bytes">bytes: FA 00</option>
@@ -239,6 +250,7 @@ byId("app").innerHTML = `
     <details class="fold" data-fold="grid" open>
     <summary class="section-title" id="conversionTitle"></summary>
     <div class="pane-header">
+      <button id="refreshGrid" title="Draw the byte grid again from the current values (it is not updated on each change, to keep large messages fast)">Refresh</button>
       <span class="copy-group">
         <span class="layout-label" title="Order of the bytes in the grid and its exports">Order</span>
         <div class="segmented" id="gridOrder" title="Word: each word most significant byte first, so it reads as its value (+3 +2 +1 +0 in little endian). Memory: the bytes in memory order, +0 +1 +2 +3, as the buffer in bytes">
@@ -1070,17 +1082,108 @@ function renderFields(a_model: IModel): void {
   }
 }
 
-function renderConversion(a_model: IModel): void {
+/// A node of the tree by its path.
+function findNode(a_nodes: readonly IFieldNode[], a_path: string): IFieldNode | undefined {
+  for (const node of a_nodes) {
+    if (node.path === a_path) {
+      return node;
+    }
+    if (node.kind !== "leaf" && a_path.startsWith(node.path)) {
+      const found = findNode(node.children, a_path);
+      if (found !== undefined) {
+        return found;
+      }
+    }
+  }
+  return undefined;
+}
+
+interface IDataScope {
+  /// bytes of the structure shown, from start to end (excluded), whole words
+  readonly start: number;
+  readonly end: number;
+  readonly label: string;
+}
+
+/// Part of the structure the buffers and the byte grid show.
+function dataScope(a_model: IModel): IDataScope {
+  const all = { start: 0, end: a_model.size, label: "all" };
+  const node = state.dataScope === "" ? undefined : findNode(a_model.tree, state.dataScope);
+  if (node === undefined || node.kind === "leaf") {
+    return all;
+  }
+  let part = node;
+  let label = node.path;
+  if (node.kind === "array") {
+    const [min, max] = arrayRange(node);
+    part = { ...node, firstSlot: node.children[min].firstSlot, lastSlot: node.children[max].lastSlot };
+    label = `${node.path}[${min}..${max}]`;
+  }
+  const extent = nodeExtent(a_model, part);
+  const wordBytes = Math.max(1, state.wordBits / 8);
+  const first = extent.byteOffset * 8 + (extent.bitOffset ?? 0);
+  const start = Math.floor(first / 8 / wordBytes) * wordBytes;
+  const end = Math.min(a_model.size, Math.ceil((first + extent.bitWidth) / 8 / wordBytes) * wordBytes);
+  return { start, end, label };
+}
+
+/// Choices of the Show list: all, then the structures and arrays of the
+/// tree (not the elements of the arrays: an array shows the elements chosen
+/// in the table).
+function fillScopeSelect(a_model: IModel): void {
+  const options: HTMLOptionElement[] = [];
+  const all = createElement("option", undefined, `All (${a_model.size} bytes)`);
+  all.value = "";
+  options.push(all);
+  const walk = (a_nodes: readonly IFieldNode[], a_depth: number): void => {
+    for (const node of a_nodes) {
+      if (node.kind === "struct" || node.kind === "array") {
+        const option = createElement("option", undefined, `${"\u00a0\u00a0".repeat(a_depth)}${node.path}${node.kind === "array" ? ` [${arrayRange(node).join("..")}]` : ""}`);
+        option.value = node.path;
+        options.push(option);
+        if (node.kind === "struct") {
+          walk(node.children, a_depth + 1);
+        }
+      }
+    }
+  };
+  walk(a_model.tree, 1);
+  scopeSelect.replaceChildren(...options);
+  scopeSelect.value = options.some((a_option) => a_option.value === state.dataScope) ? state.dataScope : "";
+}
+
+/// Titles of the data sections, cheap: updated with every change.
+function renderDataTitles(a_model: IModel): void {
   dataTitle.textContent = `Data of ${a_model.name ?? "the structure"} (${a_model.size} bytes)`;
   conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}, ${gridOrderText()}`;
+}
+
+/// Mark the buffers and the byte grid as not up to date: they are drawn
+/// again when their section is opened or Refresh is pressed.
+function markDataStale(): void {
+  refreshDataButton.classList.add("stale");
+  refreshGridButton.classList.add("stale");
+}
+
+function isSectionOpen(a_name: string): boolean {
+  return document.querySelector<HTMLDetailsElement>(`details.fold[data-fold="${a_name}"]`)?.open ?? false;
+}
+
+/// The buffers, on the part of the message chosen with Show.
+function renderBuffers(a_model: IModel): void {
+  refreshDataButton.classList.remove("stale");
+  fillScopeSelect(a_model);
+  const scope = dataScope(a_model);
+  const whole = scope.start === 0 && scope.end === a_model.size;
   // The From buffer shows the bytes up to the end of the structure, as the
   // To buffer does; bytes after it are kept but not shown, and dropped as
   // soon as the From buffer is edited.
   const shownLength = Math.min(a_model.allBytes.length, state.offset + a_model.size);
   const hidden = a_model.allBytes.length - shownLength;
-  bufferLabel.textContent = `From ${layoutName(sourceLayout())}`
-    + (hidden > 0 ? ` (${hidden} byte${hidden === 1 ? "" : "s"} after the structure not shown)` : "");
-  bufferLabel.title = hidden > 0 ? "The buffer holds more bytes than the structure; editing the From buffer drops them" : "";
+  const part = whole ? "" : `, bytes ${scope.start} to ${scope.end - 1} (${scope.label})`;
+  bufferLabel.textContent = `From ${layoutName(sourceLayout())}${part}`
+    + (whole && hidden > 0 ? ` (${hidden} byte${hidden === 1 ? "" : "s"} after the structure not shown)` : "");
+  bufferLabel.title = whole && hidden > 0 ? "The buffer holds more bytes than the structure; editing the From buffer drops them" : "";
   // A From buffer shorter than the structure: the To buffer still covers the
   // whole structure, the missing bytes read as 0; say so on both buffers
   const missing = Math.max(0, state.offset + a_model.size - a_model.allBytes.length);
@@ -1088,11 +1191,14 @@ function renderConversion(a_model: IModel): void {
     bufferLabel.textContent += ` (${missing} byte${missing === 1 ? "" : "s"} missing for the structure, read as 0)`;
   }
   bufferLabel.classList.toggle("warning", missing > 0);
-  targetBufferLabel.textContent = `To ${layoutName(targetLayout())}`
-    + (missing > 0 ? ` (the whole structure: the ${missing} missing byte${missing === 1 ? "" : "s"} of From counted as 0)` : "");
+  targetBufferLabel.textContent = `To ${layoutName(targetLayout())}${part}`
+    + (missing > 0 ? ` (the missing byte${missing === 1 ? "" : "s"} of From counted as 0)` : "");
   targetBufferLabel.classList.toggle("warning", missing > 0);
   if (document.activeElement !== bufferInput) {
-    bufferInput.value = formatBuffer(a_model.allBytes.subarray(0, shownLength), state.bufferFormat, BUFFER_WORD_ORDER);
+    const fromBytes = whole
+      ? a_model.allBytes.subarray(0, shownLength)
+      : a_model.allBytes.subarray(state.offset + scope.start, Math.min(a_model.allBytes.length, state.offset + scope.end));
+    bufferInput.value = formatBuffer(fromBytes, state.bufferFormat, BUFFER_WORD_ORDER);
     bufferInput.classList.remove("invalid");
     bufferInput.title = "";
   }
@@ -1100,9 +1206,14 @@ function renderConversion(a_model: IModel): void {
     ? "01 02 0A FF, 0x01 0x02, \\x01\\x02 or 01020AFF"
     : `Hex words, e.g. ${formatBuffer([0xFA, 0x00, 0x12, 0x34], state.bufferFormat, BUFFER_WORD_ORDER)}`;
   if (document.activeElement !== targetBufferInput) {
-    targetBufferInput.value = formatBuffer(a_model.converted, state.bufferFormat, BUFFER_WORD_ORDER);
+    targetBufferInput.value = formatBuffer(a_model.converted.subarray(scope.start, scope.end), state.bufferFormat, BUFFER_WORD_ORDER);
     targetBufferInput.classList.remove("invalid");
   }
+}
+
+/// The byte grid, on the part of the message chosen with Show.
+function renderGrid(a_model: IModel): void {
+  refreshGridButton.classList.remove("stale");
   renderByteGrid(a_model);
 }
 
@@ -1113,7 +1224,8 @@ function renderConversion(a_model: IModel): void {
 /// first drawn on one line to measure its cells.
 function renderByteGrid(a_model: IModel): void {
   const wordBytes = Math.max(1, state.wordBits / 8);
-  const words = Math.max(1, Math.ceil(a_model.size / wordBytes));
+  const scope = dataScope(a_model);
+  const words = Math.max(1, Math.ceil((scope.end - scope.start) / wordBytes));
   drawByteGrid(a_model, words);
   const available = byteGrid.parentElement?.clientWidth ?? 0;
   const label = byteGrid.querySelector<HTMLElement>("tr.byte-grid-bytes th");
@@ -1149,7 +1261,9 @@ interface IGridSide {
 /// the From side then the To side, each word most significant byte first.
 function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
   const wordBytes = Math.max(1, state.wordBits / 8);
-  const words = Math.ceil(a_model.size / wordBytes);
+  const scope = dataScope(a_model);
+  const firstScopeWord = Math.floor(scope.start / wordBytes);
+  const words = Math.ceil(scope.end / wordBytes);
   const fromAt = (a_offset: number): number | undefined => (a_offset < a_model.bytes.length ? a_model.bytes[a_offset] : undefined);
   const toAt = (a_offset: number): number | undefined => a_model.converted[a_offset];
   const sides = [
@@ -1157,7 +1271,7 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
     { label: `To ${layoutName(targetLayout())}`, endianness: state.targetEndianness, at: toAt, other: fromAt, missing: false }
   ];
   const lines: IGridSide[][] = [];
-  for (let firstWord = 0; firstWord < words; firstWord += a_wordsPerRow) {
+  for (let firstWord = firstScopeWord; firstWord < words; firstWord += a_wordsPerRow) {
     const lastWord = Math.min(firstWord + a_wordsPerRow, words);
     lines.push(sides.map((a_side) => {
       const cells: IGridCell[] = [];
@@ -1187,7 +1301,7 @@ function gridLines(a_model: IModel, a_wordsPerRow: number): IGridSide[][] {
 /// width.
 function gridText(a_model: IModel): string {
   // All the words on one line: a comment is read in an editor, not wrapped
-  const lines = gridLines(a_model, Math.max(1, Math.ceil(a_model.size / Math.max(1, state.wordBits / 8))));
+  const lines = gridLines(a_model, Number.MAX_SAFE_INTEGER);
   const cells = lines.flat().flatMap((a_side) => a_side.cells);
   const width = Math.max(3, ...cells.map((a_cell) => Math.max(a_cell.offset.length, a_cell.byte.length)));
   const labelWidth = Math.max(...lines.flat().map((a_side) => a_side.label.length));
@@ -1299,7 +1413,8 @@ function update(): void {
     model = computeModel();
   }
   renderFields(model);
-  renderConversion(model);
+  renderDataTitles(model);
+  markDataStale();
   saveState(state);
 }
 
@@ -1321,15 +1436,27 @@ targetBufferInput.addEventListener("input", () => {
   }
   targetBufferInput.classList.remove("invalid");
   targetBufferInput.title = "";
-  const fromBytes = convertStruct(model.fields, typed.bytes, targetLayout(), sourceLayout(), model.alignment);
+  // Typed bytes replace the part shown (all of it by default) of the To
+  // structure, converted back into the From buffer
+  const scope = dataScope(model);
+  const toBytes = new Uint8Array(model.size);
+  toBytes.set(model.converted);
+  toBytes.set(typed.bytes.subarray(0, scope.end - scope.start), scope.start);
+  const fromBytes = convertStruct(model.fields, toBytes, targetLayout(), sourceLayout(), model.alignment);
   const required = state.offset + model.size;
   const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
   bytes.set(model.allBytes);
   bytes.set(fromBytes, state.offset);
   state.buffer = formatHexBytes(bytes);
   update();
+  renderBuffers(model);
 });
-targetBufferInput.addEventListener("blur", () => update());
+targetBufferInput.addEventListener("blur", () => {
+  update();
+  if (model !== undefined) {
+    renderBuffers(model);
+  }
+});
 /// The From buffer is typed in the chosen format and kept as hex bytes.
 bufferInput.addEventListener("input", () => {
   const typed = parseBuffer(bufferInput.value, state.bufferFormat, BUFFER_WORD_ORDER);
@@ -1340,15 +1467,66 @@ bufferInput.addEventListener("input", () => {
   }
   bufferInput.classList.remove("invalid");
   bufferInput.title = "";
-  state.buffer = formatHexBytes(typed.bytes);
+  if (model === undefined) {
+    return;
+  }
+  const scope = dataScope(model);
+  if (scope.start === 0 && scope.end === model.size) {
+    state.buffer = formatHexBytes(typed.bytes);
+  } else {
+    // Typed bytes replace the part shown
+    const required = state.offset + model.size;
+    const bytes = new Uint8Array(Math.max(model.allBytes.length, required));
+    bytes.set(model.allBytes);
+    bytes.set(typed.bytes.subarray(0, scope.end - scope.start), state.offset + scope.start);
+    state.buffer = formatHexBytes(bytes);
+  }
   update();
+  renderBuffers(model);
 });
-bufferInput.addEventListener("blur", () => update());
+bufferInput.addEventListener("blur", () => {
+  update();
+  if (model !== undefined) {
+    renderBuffers(model);
+  }
+});
+const scopeSelect = byId<HTMLSelectElement>("dataScope");
+const refreshDataButton = byId<HTMLButtonElement>("refreshData");
+const refreshGridButton = byId<HTMLButtonElement>("refreshGrid");
+
+/// Draw the buffers and the byte grid again, those whose section is open.
+function refreshOpenSections(): void {
+  if (model === undefined) {
+    return;
+  }
+  if (isSectionOpen("buffers")) {
+    renderBuffers(model);
+  }
+  if (isSectionOpen("grid")) {
+    renderGrid(model);
+  }
+}
+refreshDataButton.addEventListener("click", () => {
+  if (model !== undefined) {
+    renderBuffers(model);
+  }
+});
+refreshGridButton.addEventListener("click", () => {
+  if (model !== undefined) {
+    renderGrid(model);
+  }
+});
+scopeSelect.addEventListener("change", () => {
+  state.dataScope = scopeSelect.value;
+  saveState(state);
+  refreshOpenSections();
+});
 const bufferFormatSelect = byId<HTMLSelectElement>("bufferFormat");
 bufferFormatSelect.value = state.bufferFormat;
 bufferFormatSelect.addEventListener("change", () => {
   state.bufferFormat = oneOf(bufferFormatSelect.value, BUFFER_FORMATS, "bytes");
   update();
+  refreshOpenSections();
 });
 rootSelect.addEventListener("change", () => {
   state.rootStruct = rootSelect.value;
@@ -1482,7 +1660,8 @@ for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("bu
       return;
     }
     const [which, kind] = (button.dataset.copy ?? "").split("-");
-    const bytes = which === "to" ? model.converted : model.bytes.subarray(0, model.size);
+    const scope = dataScope(model);
+    const bytes = which === "to" ? model.converted.subarray(scope.start, scope.end) : model.bytes.subarray(scope.start, scope.end);
     api.postMessage({
       type: "copy",
       text: kind === "c" ? formatBufferCArray(bytes, state.bufferFormat, BUFFER_WORD_ORDER) : formatBuffer(bytes, state.bufferFormat, BUFFER_WORD_ORDER)
@@ -1578,12 +1757,11 @@ function showLayouts(): void {
 definitionInput.value = state.definition;
 offsetInput.value = String(state.offset);
 showLayouts();
-update();
-// Lay the byte grid out again when the view is resized
+// Lay the byte grid out again when the view is resized, if it is shown
 let gridWidth = 0;
 new ResizeObserver(() => {
   const width = byteGrid.parentElement?.clientWidth ?? 0;
-  if (model !== undefined && width !== gridWidth) {
+  if (model !== undefined && width !== gridWidth && width > 0 && isSectionOpen("grid")) {
     gridWidth = width;
     renderByteGrid(model);
   }
@@ -1595,7 +1773,15 @@ for (const fold of Array.from(document.querySelectorAll<HTMLDetailsElement>("det
   fold.addEventListener("toggle", () => {
     state.folded = state.folded.filter((a_name) => a_name !== name).concat(fold.open ? [] : [name]);
     saveState(state);
+    // The buffers and the grid are drawn when their section is opened
+    if (fold.open && model !== undefined && name === "buffers") {
+      renderBuffers(model);
+    } else if (fold.open && model !== undefined && name === "grid") {
+      renderGrid(model);
+    }
   });
 }
+update();
+refreshOpenSections();
 bindPresetBar(api, state);
 api.postMessage({ type: "ready" });
