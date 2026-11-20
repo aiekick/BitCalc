@@ -9,6 +9,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ### Changed
 
 - Struct Decoder: the **C array** copies of the buffers have one word of the message per line (4 bytes with 32-bit words), each line ending with a `// word n` comment.
+- Struct Decoder: the byte grid is drawn a few lines at a time, the view staying responsive on large messages, with the progress in its title; a new drawing stops the one in progress. Its cells are measured on one word instead of drawing the whole grid twice.
 
 ## [0.0.4] - 2026-11-19
 

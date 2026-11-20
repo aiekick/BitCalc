@@ -1182,7 +1182,11 @@ function fillScopeSelect(a_model: IModel): void {
 /// Titles of the data sections, cheap: updated with every change.
 function renderDataTitles(a_model: IModel): void {
   dataTitle.textContent = `Data of ${a_model.name ?? "the structure"} (${a_model.size} bytes)`;
-  conversionTitle.textContent = `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}, ${gridOrderText()}`;
+  conversionTitle.textContent = gridTitleText();
+}
+
+function gridTitleText(): string {
+  return `Byte by byte: ${layoutName(sourceLayout())} → ${layoutName(targetLayout())}, ${gridOrderText()}`;
 }
 
 /// Mark the buffers and the byte grid as not up to date: they are drawn
@@ -1253,18 +1257,19 @@ function renderByteGrid(a_model: IModel): void {
   const wordBytes = Math.max(1, state.wordBits / 8);
   const scope = dataScope(a_model);
   const words = Math.max(1, Math.ceil((scope.end - scope.start) / wordBytes));
-  drawByteGrid(a_model, words);
+  // Measure the cells on a sample, the last word (its offsets are the
+  // widest), rather than drawing the whole grid twice
+  const sample = gridLines(a_model, 1);
+  byteGrid.replaceChildren(...(sample.length > 0 ? gridLineRows(sample[sample.length - 1]) : []));
   const available = byteGrid.parentElement?.clientWidth ?? 0;
   const label = byteGrid.querySelector<HTMLElement>("tr.byte-grid-bytes th");
   const cells = byteGrid.querySelectorAll<HTMLElement>("tr.byte-grid-bytes td");
-  if (available <= 0 || label === null || cells.length === 0) {
-    return;
+  let perRow = words;
+  if (available > 0 && label !== null && cells.length > 0) {
+    const cellWidth = Math.max(...Array.from(cells, (a_cell) => a_cell.getBoundingClientRect().width));
+    perRow = Math.max(1, Math.floor((available - label.getBoundingClientRect().width - 2) / (cellWidth * wordBytes)));
   }
-  const cellWidth = Math.max(...Array.from(cells, (a_cell) => a_cell.getBoundingClientRect().width));
-  const perRow = Math.max(1, Math.floor((available - label.getBoundingClientRect().width - 2) / (cellWidth * wordBytes)));
-  if (perRow < words) {
-    drawByteGrid(a_model, perRow);
-  }
+  drawByteGrid(a_model, Math.min(perRow, words));
 }
 
 /// Offsets of a word in the reading order of a_endianness.
@@ -1405,22 +1410,59 @@ function wordOrder(a_word: number, a_wordBytes: number, a_endianness: Endianness
   return a_endianness === "little" ? offsets.reverse() : offsets;
 }
 
-function drawByteGrid(a_model: IModel, a_wordsPerRow: number): void {
-  byteGrid.replaceChildren();
-  for (const line of gridLines(a_model, a_wordsPerRow)) {
-    for (const side of line) {
-      const header = createElement("tr", "byte-grid-offsets");
-      const row = createElement("tr", "byte-grid-bytes");
-      header.append(createElement("th"));
-      row.append(createElement("th", undefined, side.label));
-      for (const cell of side.cells) {
-        const start = cell.wordStart ? "word-start" : undefined;
-        header.append(createElement("th", start, cell.offset));
-        const classes = [cell.missing ? "missing" : "", cell.changed ? "changed" : "", start ?? ""].filter((a_class) => a_class !== "").join(" ");
-        row.append(createElement("td", classes || undefined, cell.byte));
-      }
-      byteGrid.append(header, row);
+/// Table rows of one grid line: for each side, its offsets and its bytes.
+function gridLineRows(a_line: readonly IGridSide[]): HTMLTableRowElement[] {
+  const rows: HTMLTableRowElement[] = [];
+  for (const side of a_line) {
+    const header = createElement("tr", "byte-grid-offsets");
+    const row = createElement("tr", "byte-grid-bytes");
+    header.append(createElement("th"));
+    row.append(createElement("th", undefined, side.label));
+    for (const cell of side.cells) {
+      const start = cell.wordStart ? "word-start" : undefined;
+      header.append(createElement("th", start, cell.offset));
+      const classes = [cell.missing ? "missing" : "", cell.changed ? "changed" : "", start ?? ""].filter((a_class) => a_class !== "").join(" ");
+      row.append(createElement("td", classes || undefined, cell.byte));
     }
+    rows.push(header, row);
+  }
+  return rows;
+}
+
+/// Drawing of the grid in progress; a new drawing stops the previous one.
+let gridDrawing = 0;
+
+/// Draw the grid a few lines at a time, handing back to the view between
+/// them so that it stays responsive on large messages; the title gives the
+/// progress.
+function drawByteGrid(a_model: IModel, a_wordsPerRow: number): void {
+  const drawing = ++gridDrawing;
+  const lines = gridLines(a_model, a_wordsPerRow);
+  const title = gridTitleText();
+  byteGrid.replaceChildren();
+  let next = 0;
+  const step = (): void => {
+    if (drawing !== gridDrawing) {
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    // At most 20 lines or about 12 ms per frame
+    const until = performance.now() + 12;
+    const last = Math.min(lines.length, next + 20);
+    do {
+      fragment.append(...gridLineRows(lines[next]));
+      next++;
+    } while (next < last && performance.now() < until);
+    byteGrid.append(fragment);
+    if (next < lines.length) {
+      conversionTitle.textContent = `${title} (drawing ${Math.floor((next * 100) / lines.length)}%)`;
+      setTimeout(step, 0);
+    } else {
+      conversionTitle.textContent = title;
+    }
+  };
+  if (lines.length > 0) {
+    step();
   }
 }
 
