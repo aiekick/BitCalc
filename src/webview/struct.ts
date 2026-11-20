@@ -1,5 +1,5 @@
 import { BitOrder, Endianness, formatBits, fromBytes, groupDigits } from "../utils/bits";
-import { parseFieldInput } from "../utils/fieldInput";
+import { FillMode, fillValue, parseFieldInput } from "../utils/fieldInput";
 import { BUFFER_FORMATS, BufferFormat, formatBuffer, formatBufferCArrayByWord, formatHexBytes, parseBuffer, parseHexBytes } from "../utils/hexBytes";
 import { IFieldDef, parseStruct } from "../utils/structDef";
 import { formatDeclarations } from "../utils/structFormat";
@@ -206,6 +206,10 @@ byId("app").innerHTML = `
     <div class="column-toggles">
       <span class="layout-label" title="Columns shown in the field table and its exports">Columns</span>
       ${OPTIONAL_COLUMNS.map((a_column) => `<button data-column="${a_column.key}" title="Show or hide ${a_column.label}${a_column.key === "binFrom" ? " (the BIN column in the Value view)" : ""}">${a_column.label}</button>`).join("")}
+    </div>
+    <div class="column-toggles">
+      <span class="layout-label" title="Set the DEC value of every field of the structure (array elements not shown included); padding bits stay 0">Set all DEC</span>
+      <button data-fill="zero" title="Every field to 0">0</button><button data-fill="min" title="Every field to the smallest value of its type: 0 or -2^(n-1) for integers, the smallest enumerator, false, the most negative finite float">Min</button><button data-fill="max" title="Every field to the largest value of its type: 2^n - 1 or 2^(n-1) - 1 for integers, the largest enumerator, true, the largest finite float">Max</button><button data-fill="random" title="Every field to a random value: random bits for integers, a random enumerator, a random float between -1000 and 1000">Random</button>
     </div>
     <div class="table-note" id="tableNote"></div>
     <div class="table-wrap">
@@ -1664,6 +1668,27 @@ const showBinView = bindSegmented<BinView>(byId("binView"), (a_view) => {
   update();
 });
 showBinView(state.binView);
+
+// Set all the fields of the structure to 0, min, max or random values
+for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-fill]"))) {
+  button.addEventListener("click", () => {
+    if (model === undefined) {
+      return;
+    }
+    const mode = button.dataset.fill as FillMode;
+    const structBytes = new Uint8Array(model.size);
+    for (const field of model.decoded) {
+      if (field.name !== undefined) {
+        writeSlot(field, fillValue(field, mode), structBytes, sourceLayout());
+      }
+    }
+    const bytes = new Uint8Array(Math.max(model.allBytes.length, state.offset + model.size));
+    bytes.set(model.allBytes);
+    bytes.set(structBytes, state.offset);
+    state.buffer = formatHexBytes(bytes);
+    update();
+  });
+}
 
 // Show / hide the optional columns of the field table
 const columnButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-column]"));
