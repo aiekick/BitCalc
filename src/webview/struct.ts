@@ -149,13 +149,20 @@ const state: IStructState = {
   ...readStartState<IStructState>(api)
 };
 state.definition = typeof state.definition === "string" ? state.definition : "";
+state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
+state.messages = typeof state.messages === "object" && state.messages !== null && !Array.isArray(state.messages) ? state.messages : {};
+// The values of the decoded structure are saved in messages, under its name,
+// like those of the others (states saved before kept them at the top level)
+const startName = parseStruct(state.definition, state.rootStruct === "" ? undefined : state.rootStruct).name;
+if (startName !== undefined && state.messages[startName] !== undefined) {
+  Object.assign(state, state.messages[startName]);
+}
 state.buffer = typeof state.buffer === "string" ? state.buffer : "";
 state.offset = Number.isInteger(state.offset) && state.offset >= 0 ? state.offset : 0;
 state.endianness = oneOf(state.endianness, ["little", "big"], "little");
 state.bitOrder = oneOf(state.bitOrder, ["lsb0", "msb0"], "lsb0");
 state.targetEndianness = oneOf(state.targetEndianness, ["little", "big"], "big");
 state.targetBitOrder = oneOf(state.targetBitOrder, ["lsb0", "msb0"], "msb0");
-state.rootStruct = typeof state.rootStruct === "string" ? state.rootStruct : "";
 state.wordBits = [8, 16, 32, 64].includes(state.wordBits) ? state.wordBits : 32;
 state.bufferFormat = oneOf(state.bufferFormat, BUFFER_FORMATS, "bytes");
 state.nameMode = oneOf(state.nameMode, ["path", "name"], "path");
@@ -163,12 +170,32 @@ state.binView = oneOf(state.binView, ["value", "word", "numbered"], "value");
 state.gridOrder = oneOf(state.gridOrder, ["word", "memory"], "word");
 state.dataScope = typeof state.dataScope === "string" ? state.dataScope : "";
 state.tree = typeof state.tree === "object" && state.tree !== null && !Array.isArray(state.tree) ? state.tree : {};
-state.messages = typeof state.messages === "object" && state.messages !== null && !Array.isArray(state.messages) ? state.messages : {};
 state.hiddenColumns = Array.isArray(state.hiddenColumns)
   ? state.hiddenColumns.filter((a_key) => OPTIONAL_COLUMNS.some((a_column) => a_column.key === a_key))
   : [];
 state.folded = Array.isArray(state.folded) ? state.folded.filter((a_name) => typeof a_name === "string") : [];
-const saveState = createStateSaver(api);
+const stateSaver = createStateSaver(api);
+
+/// The values of the decoded structure, as kept in messages
+function currentMessage(): IMessageState {
+  return { buffer: state.buffer, offset: state.offset, tree: state.tree, dataScope: state.dataScope };
+}
+
+/// State as saved (webview, host and .bc files): the values of every
+/// structure in messages, under its name, the decoded one included. Without
+/// a structure name, they stay at the top level.
+function persistedState(): IStructState {
+  const name = model?.name ?? startName;
+  if (name === undefined) {
+    return state;
+  }
+  const { buffer: _buffer, offset: _offset, tree: _tree, dataScope: _dataScope, ...rest } = state;
+  return { ...rest, messages: { ...state.messages, [name]: currentMessage() } } as IStructState;
+}
+
+function saveState(_a_state: IStructState): void {
+  stateSaver(persistedState());
+}
 
 const ENDIANNESS_BUTTONS = `<button data-value="little">LE</button><button data-value="big">BE</button>`;
 const BIT_ORDER_BUTTONS = `<button data-value="lsb0">LSB0</button><button data-value="msb0">MSB0</button>`;
@@ -1687,7 +1714,7 @@ bufferFormatSelect.addEventListener("change", () => {
 /// chosen one come back (a zeroed buffer the first time).
 rootSelect.addEventListener("change", () => {
   if (model?.name !== undefined) {
-    state.messages[model.name] = { buffer: state.buffer, offset: state.offset, tree: state.tree, dataScope: state.dataScope };
+    state.messages[model.name] = currentMessage();
   }
   const saved = state.messages[rootSelect.value];
   state.rootStruct = rootSelect.value;
@@ -1983,11 +2010,5 @@ for (const fold of Array.from(document.querySelectorAll<HTMLDetailsElement>("det
 }
 update();
 refreshOpenSections();
-// The file lists every message, the current one included, under its name
-bindPresetBar(api, state, () => ({
-  ...state,
-  messages: model?.name !== undefined
-    ? { ...state.messages, [model.name]: { buffer: state.buffer, offset: state.offset, tree: state.tree, dataScope: state.dataScope } }
-    : state.messages
-}));
+bindPresetBar(api, state, persistedState);
 api.postMessage({ type: "ready" });

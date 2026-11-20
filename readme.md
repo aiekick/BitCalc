@@ -54,7 +54,7 @@ Decodes a raw buffer with a C structure definition, bitfields included. Each fie
 
 ![Struct Decoder: data in both layouts, byte by byte](docs/demo_structure_2.png)
 
-**Structure**: C declarations. Typedefs and enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. Each structure keeps its own buffer, offset, open tree nodes and Show choice: switching to another one and back gives its values again (a zeroed buffer the first time; loading a template forgets them). A saved configuration (`.bc`) lists every structure with its values under `messages`. A plain list of fields without braces works too. Comments are allowed. The `;` after the `}` of a structure or an enum is optional (Format drops it); fields and typedefs still end with `;`.
+**Structure**: C declarations. Typedefs and enums first if any, then the structures, which can use the enums and each other. The last structure is decoded; when there are several, a list above the field table picks another one. Each structure keeps its own buffer, offset, open tree nodes and Show choice: switching to another one and back gives its values again (a zeroed buffer the first time; loading a template forgets them). A saved configuration (`.bc`) holds them in `messages` only, every structure under its name, the decoded one included. A plain list of fields without braces works too. Comments are allowed. The `;` after the `}` of a structure or an enum is optional (Format drops it); fields and typedefs still end with `;`.
 
 ```c
 typedef uint32 t_date;      // alias of a scalar, enum or structure type

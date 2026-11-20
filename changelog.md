@@ -10,7 +10,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Struct Decoder: **Set all DEC** buttons: **0**, **Min**, **Max** and **Random** set every field of the structure (array elements not shown included) to 0, to the smallest or largest value of its type (integers on their width, enums on their enumerators, bools, finite floats), or to a random value (random bits, a random enumerator, a float between -1000 and 1000).
 
-- Struct Decoder: each structure of the definition keeps its own buffer, offset, tree and Show choice: switching the decoded structure in the list no longer applies the values of one message to the others. A structure chosen for the first time starts with a zeroed buffer; loading a template forgets the saved ones. A named configuration file lists every structure with its values, under its name (`messages`).
+- Struct Decoder: each structure of the definition keeps its own buffer, offset, tree and Show choice: switching the decoded structure in the list no longer applies the values of one message to the others. A structure chosen for the first time starts with a zeroed buffer; loading a template forgets the saved ones. The saved state and the named configuration files hold these values in one place, `messages`, every structure under its name, the decoded one included (no longer a buffer at the top level for it).
 
 - Struct Decoder: the buffers and the byte grid show by default only the words of the rows shown in the table (**Shown in the table** in the Show list): with one element of a large array shown, they show that element. **Whole message** shows everything, as before.
 
