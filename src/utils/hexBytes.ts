@@ -70,11 +70,24 @@ function wordBytesOf(a_format: BufferFormat): number {
 
 /// Tokens of a buffer in a format; a last word shorter than the others
 /// (buffer size not a multiple of the word) keeps only its bytes.
+/// "00" to "FF"
+const HEX_BYTES: readonly string[] = Array.from({ length: 256 }, (_, a_byte) => a_byte.toString(16).toUpperCase().padStart(2, "0"));
+
 function bufferTokens(a_bytes: ArrayLike<number>, a_format: BufferFormat, a_endianness: Endianness): string[] {
   const wordBytes = wordBytesOf(a_format);
   const tokens: string[] = [];
-  for (let start = 0; start < a_bytes.length; start += wordBytes) {
-    const chunk = Array.from(a_bytes).slice(start, start + wordBytes);
+  if (wordBytes === 1) {
+    // Bytes: no word to assemble
+    for (let index = 0; index < a_bytes.length; index++) {
+      const digits = HEX_BYTES[a_bytes[index] & 0xFF];
+      tokens.push(a_format === "bytes" ? digits : `0x${digits}`);
+    }
+    return tokens;
+  }
+  // Copied once: a copy per word made formatting quadratic on large buffers
+  const bytes = Array.from(a_bytes);
+  for (let start = 0; start < bytes.length; start += wordBytes) {
+    const chunk = bytes.slice(start, start + wordBytes);
     const digits = fromBytes(chunk, a_endianness).toString(16).toUpperCase().padStart(chunk.length * 2, "0");
     tokens.push(a_format === "bytes" ? digits : `0x${digits}`);
   }

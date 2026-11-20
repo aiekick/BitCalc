@@ -42,6 +42,15 @@ describe("buffer formats", () => {
     assert.match(parseBuffer("0xZZ", "words16", "big").error ?? "", /not a hex word/);
   });
 
+  test("large buffers are formatted in linear time", () => {
+    const large = new Uint8Array(200000).map((_, a_index) => a_index & 0xFF);
+    const start = Date.now();
+    for (const format of BUFFER_FORMATS) {
+      formatBuffer(large, format, "big");
+    }
+    assert.ok(Date.now() - start < 2000, `took ${Date.now() - start} ms`);
+  });
+
   test("formatBufferCArrayByWord: one word of the message per line", () => {
     const message = [0x45, 0x03, 0x00, 0x00, 0x60, 0xA0, 0x01, 0x00, 0x2A];
     assert.equal(formatBufferCArrayByWord(message, "bytes", "big", 4, 2), [

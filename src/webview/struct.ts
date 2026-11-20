@@ -1450,9 +1450,9 @@ function drawByteGrid(a_model: IModel, a_wordsPerRow: number): void {
       return;
     }
     const fragment = document.createDocumentFragment();
-    // At most 20 lines or about 12 ms per frame
+    // About 12 ms per slice, at most 200 lines
     const until = performance.now() + 12;
-    const last = Math.min(lines.length, next + 20);
+    const last = Math.min(lines.length, next + 200);
     do {
       fragment.append(...gridLineRows(lines[next]));
       next++;

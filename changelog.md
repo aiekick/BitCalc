@@ -10,6 +10,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Struct Decoder: **Set all DEC** buttons: **0**, **Min**, **Max** and **Random** set every field of the structure (array elements not shown included) to 0, to the smallest or largest value of its type (integers on their width, enums on their enumerators, bools, finite floats), or to a random value (random bits, a random enumerator, a float between -1000 and 1000).
 
+### Fixed
+
+- Struct Decoder: opening or refreshing the buffers of a large message froze the view for seconds: the buffer formatting copied the whole buffer for each byte or word (quadratic time). 8 KB now format in a few milliseconds.
+
 ### Changed
 
 - Struct Decoder: the **C array** copies of the buffers have one word of the message per line (4 bytes with 32-bit words), each line ending with a `// word n` comment.
